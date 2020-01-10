@@ -1,7 +1,7 @@
 from game.actions.base import *
 from game.actions.dsl import *
 from game.actions.misc import Cost, ReceiveBenefit, ReceiveResources
-from game.types import Benefit, StructureType, ALL_RESOURCE_TYPES
+from game.types import Benefit, ResourceType, StructureType
 
 
 class Trade(TopAction):
@@ -32,6 +32,6 @@ class GetTradeResource(DiscreteChoice):
         super().__init__()
 
     def choices(self, game_state):
-        return [ReceiveResources(typ=resource, amt=1, space=board_space)
-                for resource in ALL_RESOURCE_TYPES
+        return [ReceiveResources(typ=resource_typ, amt=1, space=board_space)
+                for resource_typ in ResourceType
                 for board_space in game_state.next_player.spaces_with_workers()]

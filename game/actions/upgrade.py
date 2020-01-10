@@ -34,6 +34,7 @@ class PlaceCubeInTopSpace(StateChange):
 
     def apply(self, game_state):
         self._top_space.place_upgrade_cube(self._pos)
+        game_state.current_player.maybe_get_upgrade_star()
 
 
 class RemoveCubeFromAnyBottomSpace(DiscreteChoice):

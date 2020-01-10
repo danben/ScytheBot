@@ -45,4 +45,7 @@ class OnMillHex(Action):
             space.produced_this_turn = True
             typ = space.terrain_type
             amt = space.num_workers()
-            ReceiveResources(typ, amt, space, is_produce=True).apply(game_state)
+            if typ is TerrainType.VILLAGE:
+                ReceiveWorkers(amt, space).apply(game_state)
+            else:
+                ReceiveResources(typ, amt, space, is_produce=True).apply(game_state)

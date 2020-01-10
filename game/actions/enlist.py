@@ -39,3 +39,4 @@ class CommitEnlist(StateChange):
     def apply(self, game_state):
         self._bottom_action.enlisted = True
         game_state.give_reward_to_player(game_state.current_player, self._enlist_reward, 2)
+        game_state.current_player.mark_enlist_benefit(self._enlist_reward)

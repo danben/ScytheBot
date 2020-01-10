@@ -1,7 +1,6 @@
 from game.actions.dsl import *
 from game.actions.base import BottomAction, BottomActionType
 from game.types import Benefit, ResourceType
-from game.components.piece import Structure
 
 
 class Build(BottomAction):
@@ -38,6 +37,4 @@ class BuildStructure(StateChange):
 
     def apply(self, game_state):
         self._top_action.build_structure()
-        structure = Structure(self._space, self._top_action.structure_typ(),
-                              game_state.current_player.faction_name())
-        game_state.current_player.build_structure(structure)
+        game_state.current_player.build_structure(self._space, self._top_action.structure_typ())

@@ -3,7 +3,7 @@ from game.actions.misc import ReceiveBenefit
 from game.components import Board
 from game.constants import MAX_COMBAT_POWER
 from game.faction import Nordic
-from game.types import ALL_RESOURCE_TYPES, Benefit, FactionName, StarType, StructureType
+from game.types import Benefit, FactionName, ResourceType, StarType, StructureType
 
 
 class MoveGain(TopAction):
@@ -41,7 +41,7 @@ class Move(DiscreteChoice):
         assert piece.not_carrying_anything()
         cur_space = piece.board_space
         load_carryables = [LoadResource(piece, resource_typ)
-                           for resource_typ in ALL_RESOURCE_TYPES
+                           for resource_typ in ResourceType
                            for _ in range(cur_space.amount_of(resource_typ))]
         if piece.is_mech():
             for worker in cur_space.workers:
@@ -92,7 +92,7 @@ class MovePieceToSpaceAndDropCarryables(StateChange):
                     scared += 1
                 game_state.current_player.remove_popularity(min(scared, game_state.current_player.popularity()))
 
-        for resource_typ in ALL_RESOURCE_TYPES:
+        for resource_typ in ResourceType:
             self._board_space.add_resources(resource_typ, self._piece.carrying_resources[resource_typ])
             self._piece.board_space.remove_resources(resource_typ, self._piece.carrying_resources[resource_typ])
         if self._piece.is_mech():
@@ -152,9 +152,11 @@ class Combat(StateChange):
         self._defender = defender
 
     def get_total_power(self, game_state, player):
+        # TODO: implement choose_numeric
         power = player.choose_numeric(0, min(MAX_COMBAT_POWER, player.power()))
         player.remove_power(power)
         for _ in range(self._space.num_combat_cards(player.faction_name())):
+            # TODO: implement choose_from
             card = player.choose_from([0] + player.available_combat_cards())
             power += card
             if card:

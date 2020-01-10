@@ -10,6 +10,8 @@ class Faction:
         self.riverwalk_destinations = riverwalk_destinations
 
     def add_riverwalk_adjacencies(self, player_adjacencies, board):
+        # If two hexes on the board are physically adjacent but not yet effectively adjacent,
+        # this could only be because one is a lake or because they're separated by a river.
         def should_add(space, other_space):
             return space.terrain_type() is not TerrainType.LAKE \
                    and other_space.terrain_type() in self.riverwalk_destinations
@@ -51,14 +53,16 @@ class Nordic(Faction):
                          riverwalk_destinations=[TerrainType.FOREST, TerrainType.MOUNTAIN])
 
     def add_teleport_adjacencies(self, player_adjacencies, board):
+        # Can move to/from lakes. Lakes already are considered effectively adjacent to everything around them.
         def should_add(_space, other_space):
             return other_space.terrain_type is TerrainType.LAKE
         for piece_typ in [PieceType.CHARACTER, PieceType.MECH]:
             Faction.add_adjacencies_from_board_adjacencies(player_adjacencies, board, piece_typ, should_add)
 
     def add_faction_specific_adjacencies(self, player_adjacencies, board):
+        # Workers can swim across rivers.
         def should_add(space, other_space):
-            return space.is_blocked_by_river(other_space)
+            return space.is_blocked_by_river(other_space) and space.terrain_type is not TerrainType.HOME_BASE
         Faction.add_adjacencies_from_board_adjacencies(player_adjacencies, board, PieceType.WORKER, should_add)
 
 

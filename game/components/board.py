@@ -1,7 +1,8 @@
 from game import constants
-from game.types import FactionName, TerrainType
+from game.types import FactionName, StructureType, TerrainType
 from collections import defaultdict
 
+# Each pair of coordinate pairs represents two hexes that are separated by a river.
 ALL_RIVERS = {((0, 3), (1, 3)), ((0, 3), (0, 4)), ((0, 4), (1, 3)), ((0, 5), (0, 6)), ((0, 5), (1, 5)),
               ((1, 1), (2, 1)), ((1, 3), (1, 4)), ((1, 4), (1, 5)), ((1, 4), (2, 5)), ((1, 5), (2, 6)),
               ((1, 6), (2, 6)), ((2, 1), (2, 2)), ((2, 2), (3, 1)), ((2, 5), (2, 6)), ((2, 5), (3, 5)),
@@ -12,20 +13,20 @@ ALL_RIVERS = {((0, 3), (1, 3)), ((0, 3), (0, 4)), ((0, 4), (1, 3)), ((0, 5), (0,
 
 ''' Adjacency should be a function of piece and board space. Adjacencies should be precomputed on launch
     or when they change. We can always start with adjacency based on hexes that touch (except where blocked
-    by rivers) and mines. Adjacency structure should be owned by the player, not the board. '''
+    by rivers) and tunnels. Adjacency structure should be owned by the player, not the board. '''
 
 
 class BoardSpace:
-    def __init__(self, terrain_type, has_encounter=False, has_tunnel=False):
-        self._terrain_type = terrain_type
+    def __init__(self, terrain_typ, has_encounter=False, has_tunnel=False):
+        self.terrain_typ = terrain_typ
         self.characters = set()
         self.mechs = set()
         self.workers = set()
         self._resources = defaultdict(int)
-        self._has_encounter = has_encounter
-        self._encounter_used = False
-        self.has_tunnel = has_tunnel
-        self._structure = None
+        self.has_encounter = has_encounter
+        self.encounter_used = False
+        self._has_tunnel = has_tunnel
+        self.structure = None
         self.produced_this_turn = False
 
     def combat_factions(self):
@@ -75,8 +76,8 @@ class BoardSpace:
         if len(candidates) == 1:
             return candidates.pop()
 
-        if self._structure:
-            return self._structure.faction_name
+        if self.structure:
+            return self.structure.faction_name
 
         return None
 
@@ -94,18 +95,13 @@ class BoardSpace:
                     return ret + 1
         return ret
 
-    def terrain_type(self):
-        return self._terrain_type
-
-    def is_encounter_space(self):
-        return self._has_encounter
-
-    def has_tunnel(self, faction_name):
+    def has_tunnel(self, faction_name=None):
         return self.has_tunnel or \
-               (self._structure and self._structure.is_mine() and self._structure.faction_name is faction_name)
+               (faction_name and self.structure and self.structure.structure_typ() is StructureType.MINE
+                and self.structure.faction_name is faction_name)
 
     def has_structure(self):
-        return self._structure is not None
+        return self.structure is not None
 
     def has_resource(self, resource_typ):
         return self._resources[resource_typ]
@@ -121,11 +117,11 @@ class BoardSpace:
         self._resources[resource_typ] -= amt
 
     def is_home_base(self):
-        return self._terrain_type == TerrainType.HOME_BASE
+        return self.terrain_typ is TerrainType.HOME_BASE
 
     def set_structure(self, structure):
-        assert self._structure is None
-        self._structure = structure
+        assert self.structure is None
+        self.structure = structure
 
     def add_piece(self, piece):
         if piece.is_character():
@@ -163,24 +159,24 @@ class BoardSpace:
                 ret.append(worker)
 
 
-def _mountain(has_encounter=False, has_mine=False):
-    return BoardSpace(TerrainType.MOUNTAIN, has_encounter, has_mine)
+def _mountain(has_encounter=False, has_tunnel=False):
+    return BoardSpace(TerrainType.MOUNTAIN, has_encounter, has_tunnel)
 
 
-def _farm(has_encounter=False, has_mine=False):
-    return BoardSpace(TerrainType.FARM, has_encounter, has_mine)
+def _farm(has_encounter=False, has_tunnel=False):
+    return BoardSpace(TerrainType.FARM, has_encounter, has_tunnel)
 
 
-def _village(has_encounter=False, has_mine=False):
-    return BoardSpace(TerrainType.VILLAGE, has_encounter, has_mine)
+def _village(has_encounter=False, has_tunnel=False):
+    return BoardSpace(TerrainType.VILLAGE, has_encounter, has_tunnel)
 
 
-def _tundra(has_encounter=False, has_mine=False):
-    return BoardSpace(TerrainType.TUNDRA, has_encounter, has_mine)
+def _tundra(has_encounter=False, has_tunnel=False):
+    return BoardSpace(TerrainType.TUNDRA, has_encounter, has_tunnel)
 
 
-def _forest(has_encounter=False, has_mine=False):
-    return BoardSpace(TerrainType.FOREST, has_encounter, has_mine)
+def _forest(has_encounter=False, has_tunnel=False):
+    return BoardSpace(TerrainType.FOREST, has_encounter, has_tunnel)
 
 
 def _lake():
@@ -205,22 +201,26 @@ THE_FACTORY = _factory()
 
 _board_spaces = [
     [None, _mountain(), _farm(), _village(has_encounter=True), _forest(), _tundra(), _village()],
-    [_lake(), _tundra(has_encounter=True), _lake(), _tundra(has_mine=True), _mountain(has_encounter=True), _farm(),
+    [_lake(), _tundra(has_encounter=True), _lake(), _tundra(has_tunnel=True), _mountain(has_encounter=True), _farm(),
      _farm(has_encounter=True)],
-    [None, _forest(), _mountain(has_mine=True), _forest(), _lake(), _forest(has_mine=True), _village()],
+    [None, _forest(), _mountain(has_tunnel=True), _forest(), _lake(), _forest(has_tunnel=True), _village()],
     [_farm(), _village(), _lake(), THE_FACTORY, _mountain(), _tundra(has_encounter=True), _mountain()],
-    [_forest(has_encounter=True), _forest(), _farm(has_mine=True), _tundra(), _lake(), _village(has_mine=True),
+    [_forest(has_encounter=True), _forest(), _farm(has_tunnel=True), _tundra(), _lake(), _village(has_tunnel=True),
      _lake()],
-    [_mountain(), _village(has_encounter=True), _village(has_encounter=True), _tundra(has_mine=True), _forest(),
+    [_mountain(), _village(has_encounter=True), _village(has_encounter=True), _tundra(has_tunnel=True), _forest(),
      _mountain(has_encounter=True), _tundra()],
     [None, _tundra(), _lake(), _farm(), _mountain(has_encounter=True), _village(), _farm()],
     [None, None, None, _village(), None, None, None]
 ]
 
-_mine_spaces = [space for r in _board_spaces for space in r if space.has_mine()]
+tunnel_spaces = [space for r in _board_spaces for space in r if space.has_tunnel()]
+
+lake_spaces = [space for r in _board_spaces for space in r if space.terrain_typ is TerrainType.LAKE]
+
+encounter_spaces = [space for r in _board_spaces for space in r if space.has_encounter]
 
 
-def _on_the_board(row, col):
+def on_the_board(row, col):
     return 0 <= row < constants.BOARD_ROWS and 0 <= col < constants.BOARD_COLS
 
 
@@ -229,6 +229,20 @@ def _board_adjacencies(row, col):
         return [(row, col+1), (row, col-1), (row-1, col), (row-1, col-1), (row+1, col), (row+1, col-1)]
     else:
         return [(row, col+1), (row, col-1), (row-1, col), (row-1, col+1), (row+1, col), (row+1, col+1)]
+
+
+def move_down_and_right(row, col):
+    if row % 2 == 0:
+        return row+1, col
+    else:
+        return row+1, col+1
+
+
+def move_up_and_right(row, col):
+    if row % 2 == 0:
+        return row - 1, col
+    else:
+        return row - 1, col + 1
 
 
 _home_base_adjacencies = {FactionName.SAXONY: [(5, 0), (6, 1)],
@@ -240,6 +254,7 @@ _home_base_adjacencies = {FactionName.SAXONY: [(5, 0), (6, 1)],
 
 class Board:
     def __init__(self, active_factions):
+        self.all_spaces_except_home_bases = _board_spaces
         self.factory = THE_FACTORY
         self.home_bases = {FactionName.SAXONY: _home_base(FactionName.SAXONY in active_factions),
                            FactionName.RUSVIET: _home_base(FactionName.RUSVIET in active_factions),
@@ -255,10 +270,10 @@ class Board:
                     other_space = _board_spaces[other_r][other_c] if _on_the_board(other_r, other_c) else None
                     if other_space:
                         adjacent_spaces.append(other_space)
-                    if space.has_mine():
-                        for mine_space in _mine_spaces:
-                            if space is not mine_space:
-                                adjacent_spaces.append(mine_space)
+                    if space.has_tunnel():
+                        for tunnel_space in tunnel_spaces:
+                            if space is not tunnel_space:
+                                adjacent_spaces.append(tunnel_space)
                 self.base_adjacencies[space] = adjacent_spaces
         for faction_name, home_base in self.home_bases.items():
             adjacent_spaces = map(lambda x: _board_spaces[x[0]][x[1]], _home_base_adjacencies[faction_name])
@@ -269,18 +284,19 @@ class Board:
             space2 = _board_spaces[coord_pair[1][0]][coord_pair[1][1]]
             return space1, space2
 
+        self._blocked_by_rivers = set(map(to_space_pair, list(ALL_RIVERS)))
+
         def is_blocked_by_river(from_space, to_space):
             return (from_space, to_space) in self._blocked_by_rivers \
                    or (to_space, from_space) in self._blocked_by_rivers \
                    or (from_space is self.home_bases[FactionName.RUSVIET]
                        and to_space.terrain_type() is TerrainType.FARM)
 
-        self._blocked_by_rivers = set(map(to_space_pair, list(ALL_RIVERS)))
         self.adjacencies_accounting_for_rivers_and_lakes = {}
         for space, all_adjacent_spaces in self.base_adjacencies.items():
             adjacent_spaces = [other_space for other_space in all_adjacent_spaces
                                if not (is_blocked_by_river(space, other_space)
-                                       or other_space.terrain_type() is TerrainType.LAKE)]
+                                       or other_space.terrain_typ() is TerrainType.LAKE)]
             self.adjacencies_accounting_for_rivers_and_lakes[space] = adjacent_spaces
 
         for home_base in self.home_bases.values():

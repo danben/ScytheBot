@@ -45,9 +45,6 @@ class ResourceType(Enum):
     FOOD = 4
 
 
-ALL_RESOURCE_TYPES = [x for x in ResourceType]
-
-
 class StarType(Enum):
     UPGRADE = 1
     MECH = 2

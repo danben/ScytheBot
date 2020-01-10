@@ -1,6 +1,8 @@
 from game.actions import *
 from game.types import PlayerMatName
 
+import numpy as np
+
 _starting_popularity = {PlayerMatName.INDUSTRIAL: 2,
                         PlayerMatName.ENGINEERING: 2,
                         PlayerMatName.PATRIOTIC: 2,
@@ -55,3 +57,10 @@ class PlayerMat:
 
     def starting_money(self):
         return self._starting_money
+
+    def move_pawn_to(self, i):
+        self.last_action_spot_taken = i
+
+    @staticmethod
+    def choose(num):
+        np.random.choice([pmn for pmn in PlayerMatName], num, replace=False)
