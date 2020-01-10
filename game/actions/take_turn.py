@@ -14,7 +14,7 @@ class TakeTurn(DiscreteChoice):
             action_combos = [(i, action_combo) for i, action_combo in enumerate(player_mat.action_spaces())
                              if player_mat.last_action_spot_taken != i]
 
-        return [Sequence.of_list([MovePawn(i, player_mat), Optional(action_combo[0]), Optional(action_combo[1])])
+        return [Sequence.of_list([MovePawn(i), Optional(action_combo[0]), Optional(action_combo[1])])
                 for i, action_combo in action_combos]
 
 

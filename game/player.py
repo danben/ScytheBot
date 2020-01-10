@@ -5,11 +5,12 @@ from collections import defaultdict
 
 import numpy as np
 
+
 class Stars:
     def __init__(self, faction_name):
         self._count = 0
-        self._achieved = defaultdict(0)
-        self._limits = defaultdict(1)
+        self._achieved = defaultdict(int)
+        self._limits = defaultdict(lambda: 1)
         if faction_name == FactionName.SAXONY:
             self._limits[StarType.COMBAT] = 6
             self._limits[StarType.SECRET_OBJECTIVE] = 6
@@ -31,7 +32,7 @@ def combat_cards_dict(combat_cards):
 
 class Player:
     def __init__(self, faction, player_mat, board, draw_combat_cards):
-        self._faction = faction
+        self.faction = faction
         self._player_mat = player_mat
         self._coins = player_mat.starting_money()
         self._popularity = player_mat.starting_popularity()
@@ -56,10 +57,10 @@ class Player:
                              PieceType.MECH: board.adjacencies_accounting_for_rivers_and_lakes.copy(),
                              PieceType.WORKER: board.adjacencies_accounting_for_rivers_and_lakes.copy()}
 
-        self._faction.add_faction_specific_adjacencies(self._adjacencies, board.base_adjacencies)
+        self.faction.add_faction_specific_adjacencies(self._adjacencies, board.base_adjacencies)
 
     def faction_name(self):
-        return self._faction.name
+        return self.faction.name
 
     def build_structure(self, structure):
         assert not self._structures[structure.structure_typ()]
@@ -138,7 +139,6 @@ class Player:
         self._combat_cards[card] -= 1
         return card
 
-
     def add_worker(self, board_space):
         new_worker = Worker(board_space, self.faction_name)
         self._workers.add(new_worker)
@@ -195,6 +195,8 @@ class Player:
         for mech in self._deployed_mechs:
             mech.moved_this_turn = False
             mech.moved_into_enemy_territory_this_turn = False
+        if self.faction_name() is FactionName.CRIMEA:
+            self.faction.spent_combat_card_as_resource_this_turn = False
 
     def can_enlist(self):
         for enlisted in self._enlist_rewards.values():
@@ -245,10 +247,10 @@ class Player:
             self.add_teleport_adjacencies(board)
 
     def add_riverwalk_adjacencies(self, board):
-        self._faction.add_riverwalk_adjacencies(self._adjacencies, board)
+        self.faction.add_riverwalk_adjacencies(self._adjacencies, board)
 
     def add_teleport_adjacencies(self, board):
-        self._faction.add_teleport_adjacencies(self._adjacencies, board)
+        self.faction.add_teleport_adjacencies(self._adjacencies, board)
 
     def available_resources(self, resource_typ):
         return sum([space.amount_of(resource_typ) for space in self.controlled_spaces()])
@@ -289,10 +291,10 @@ class Player:
         assert False
 
     def effective_adjacent_spaces(self, piece, board):
-        assert piece.faction_name is self._faction.name
+        assert piece.faction_name is self.faction.name
         adjacent_spaces = self._adjacencies[piece.typ()][piece.board_space]
         if self.mech_slots[constants.TELEPORT_MECH] and piece.is_plastic():
-            extra_adjacent_spaces = self._faction.extra_adjacent_spaces(piece, board)
+            extra_adjacent_spaces = self.faction.extra_adjacent_spaces(piece, board)
             adjacent_spaces = adjacent_spaces.copy()
             for space in extra_adjacent_spaces:
                 if space not in adjacent_spaces:

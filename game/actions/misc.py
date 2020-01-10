@@ -48,12 +48,10 @@ class Cost:
     def __init__(self, power=0, popularity=0, coins=0, oil=0, metal=0, wood=0, food=0, combat_cards=0):
         self.power = power
         self.popularity = popularity
-        self.coins = coins
-        self.oil = oil
-        self.metal = metal
-        self.wood = wood
-        self.food = food
         self.combat_cards = combat_cards
+        self.coins = coins
+        self.resource_cost = {ResourceType.METAL: metal, ResourceType.OIL: oil, ResourceType.WOOD: wood,
+                              ResourceType.FOOD: food}
 
     @staticmethod
     def of_resource_type(resource_typ, amt):
@@ -66,3 +64,7 @@ class Cost:
         elif resource_typ is ResourceType.WOOD:
             return Cost(wood=amt)
         assert False
+
+    def reduce_by_1(self, resource_typ):
+        assert self.resource_cost[resource_typ]
+        self.resource_cost[resource_typ] -= 1

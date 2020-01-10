@@ -11,7 +11,8 @@ class Faction:
 
     def add_riverwalk_adjacencies(self, player_adjacencies, board):
         def should_add(space, other_space):
-            return space.terrain_type() is not TerrainType.LAKE and other_space.terrain_type() in self.riverwalk_destinations
+            return space.terrain_type() is not TerrainType.LAKE \
+                   and other_space.terrain_type() in self.riverwalk_destinations
         for piece_typ in [PieceType.CHARACTER, PieceType.MECH]:
             Faction.add_adjacencies_from_board_adjacencies(player_adjacencies, board, piece_typ, should_add)
 
@@ -101,6 +102,7 @@ class Crimea(Faction):
     def __init__(self):
         super().__init__(FactionName.CRIMEA, starting_power=5, starting_combat_cards=5,
                          riverwalk_destinations=[TerrainType.FARM, TerrainType.TUNDRA])
+        self.spent_combat_card_as_resource_this_turn = False
 
     def add_teleport_adjacencies(self, player_adjacencies, board):
         my_home_base = board.home_bases[FactionName.CRIMEA]

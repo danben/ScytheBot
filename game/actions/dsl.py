@@ -39,7 +39,7 @@ class Optional(Action):
         super().__init__()
         self._action = action
 
-    def choices(self, game_state):
+    def choices(self, _game_state):
         return [Nothing(), self._action]
 
 

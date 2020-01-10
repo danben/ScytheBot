@@ -13,7 +13,7 @@ class MoveGain(TopAction):
     def choices(self, _game_state):
         move = Sequence.of_list_all_optional([Move(), Move()])
         if self._cubes_upgraded[0]:
-            move = Sequence(Optional(Move()), move, MaybeCombat())
+            move = Sequence.of_list([Optional(Move()), move, MaybeCombat()])
         coins_to_gain = 2 if self._cubes_upgraded[1] else 1
         gain = ReceiveBenefit(Benefit.COINS, amt=coins_to_gain)
         return [move, gain]
@@ -134,11 +134,15 @@ class MaybeCombat(StateChange):
     # - send the loser home and give the winner a star.
     def apply(self, game_state):
         for space in game_state.board.base_adjacencies.keys():
-            if (faction1, faction2) := space.combat_factions():
+            combat_factions = space.combat_factions()
+            if combat_factions:
+                faction1, faction2 = combat_factions
                 current_player_faction = game_state.current_player.faction_name()
                 assert current_player_faction is faction1 or current_player_faction is faction2
-                attacker, defender = faction1, faction2 if current_player_faction is faction1 else faction2, faction1
+                attacker, defender = (faction1, faction2) \
+                    if current_player_faction is faction1 else (faction2, faction1)
                 game_state.action_stack.append(Combat(space, attacker, defender))
+
 
 class Combat(StateChange):
     def __init__(self, space, attacker, defender):
@@ -166,23 +170,24 @@ class Combat(StateChange):
             elif self._defender is FactionName.SAXONY:
                 attacking_player.remove_power(min(2, attacking_player.power()))
         if self._attacker is FactionName.NORDIC or self._defender is FactionName.NORDIC:
-            nordic, not_nordic = attacking_player, defending_player \
-                if self._attacker is FactionName.NORDIC else defending_player, attacking_player
+            nordic, not_nordic = (attacking_player, defending_player) \
+                if self._attacker is FactionName.NORDIC else (defending_player, attacking_player)
             if nordic.power():
                 if nordic.choose[Nordic.DONT_USE_ARTILLERY, Nordic.USE_ARTILLERY]:
                     nordic.remove_power(1)
                     not_nordic.remove_power(min(2, not_nordic.power()))
         if self._attacker is FactionName.CRIMEA or self._defender is FactionName.CRIMEA:
-            crimea, not_crimea = attacking_player, defending_player \
-                if self._attacker is FactionName.CRIMEA else defending_player, attacking_player
-            if card := not_crimea.remove_random_combat_card():
+            crimea, not_crimea = (attacking_player, defending_player) \
+                if self._attacker is FactionName.CRIMEA else (defending_player, attacking_player)
+            card = not_crimea.remove_random_combat_card()
+            if card:
                 crimea.add_combat_card(card)
 
         attacker_power = self.get_total_power(game_state, attacking_player)
         defender_power = self.get_total_power(game_state, defending_player)
-        winner, loser = attacking_player, defending_player \
+        winner, loser = (attacking_player, defending_player) \
             if attacker_power >= defender_power \
-            else defending_player, attacking_player
+            else (defending_player, attacking_player)
         for piece in self._space.all_pieces(loser.faction_name()):
             Board.move_piece(piece, loser.home_base)
             if winner is attacking_player and self._attacker is not FactionName.POLANIA \

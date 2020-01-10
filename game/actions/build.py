@@ -17,7 +17,8 @@ class Build(BottomAction):
 
 class ChooseStructureToBuild(DiscreteChoice):
     def choices(self, game_state):
-        return [ChooseSpaceToBuildOn(top_action) for top_action in game_state.current_player.top_actions_with_unbuilt_structures()]
+        return [ChooseSpaceToBuildOn(top_action)
+                for top_action in game_state.current_player.top_actions_with_unbuilt_structures()]
 
 
 class ChooseSpaceToBuildOn(DiscreteChoice):
@@ -38,5 +39,5 @@ class BuildStructure(StateChange):
     def apply(self, game_state):
         self._top_action.build_structure()
         structure = Structure(self._space, self._top_action.structure_typ(),
-                                                          game_state.current_player.faction_name())
+                              game_state.current_player.faction_name())
         game_state.current_player.build_structure(structure)

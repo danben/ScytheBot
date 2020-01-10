@@ -22,6 +22,7 @@ class ChooseRecruitToEnlist(DiscreteChoice):
 
 class ChooseEnlistReward(DiscreteChoice):
     def __init__(self, bottom_action):
+        super().__init__()
         self._bottom_action = bottom_action
 
     def choices(self, game_state):
@@ -31,6 +32,7 @@ class ChooseEnlistReward(DiscreteChoice):
 
 class CommitEnlist(StateChange):
     def __init__(self, bottom_action, enlist_reward):
+        super().__init__()
         self._bottom_action = bottom_action
         self._enlist_reward = enlist_reward
 

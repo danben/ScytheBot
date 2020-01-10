@@ -239,8 +239,7 @@ _home_base_adjacencies = {FactionName.SAXONY: [(5, 0), (6, 1)],
 
 
 class Board:
-    def __init__(self, players):
-        active_factions = map(lambda p:p.faction_name(), players)
+    def __init__(self, active_factions):
         self.factory = THE_FACTORY
         self.home_bases = {FactionName.SAXONY: _home_base(FactionName.SAXONY in active_factions),
                            FactionName.RUSVIET: _home_base(FactionName.RUSVIET in active_factions),
@@ -261,7 +260,7 @@ class Board:
                             if space is not mine_space:
                                 adjacent_spaces.append(mine_space)
                 self.base_adjacencies[space] = adjacent_spaces
-        for faction_name, home_base in self._home_bases.items():
+        for faction_name, home_base in self.home_bases.items():
             adjacent_spaces = map(lambda x: _board_spaces[x[0]][x[1]], _home_base_adjacencies[faction_name])
             self.base_adjacencies[home_base] = adjacent_spaces
 
@@ -273,7 +272,8 @@ class Board:
         def is_blocked_by_river(from_space, to_space):
             return (from_space, to_space) in self._blocked_by_rivers \
                    or (to_space, from_space) in self._blocked_by_rivers \
-                   or (from_space is self.home_bases[FactionName.RUSVIET] and to_space.terrain_type() is TerrainType.FARM)
+                   or (from_space is self.home_bases[FactionName.RUSVIET]
+                       and to_space.terrain_type() is TerrainType.FARM)
 
         self._blocked_by_rivers = set(map(to_space_pair, list(ALL_RIVERS)))
         self.adjacencies_accounting_for_rivers_and_lakes = {}
@@ -283,11 +283,11 @@ class Board:
                                        or other_space.terrain_type() is TerrainType.LAKE)]
             self.adjacencies_accounting_for_rivers_and_lakes[space] = adjacent_spaces
 
-        for home_base in self.home_bases.keys():
-            assert len(self.adjacencies_accounting_for_rivers_and_lakes[home_base] == 2)
+        for home_base in self.home_bases.values():
+            assert len(self.adjacencies_accounting_for_rivers_and_lakes[home_base]) == 2
 
     def home_base(self, faction_name):
-        return self._home_bases[faction_name]
+        return self.home_bases[faction_name]
 
     @staticmethod
     def move_piece(piece, to_space):

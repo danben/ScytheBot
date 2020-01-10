@@ -1,7 +1,7 @@
 from game.actions import DiscreteChoice, NumericChoice, StateChange, TakeTurn
 from game.components import Board, CombatCards, PlayerMat
 from game.player import Player
-from game.types import Benefit, ResourceType
+from game.types import Benefit, FactionName, ResourceType
 
 from game import faction
 
@@ -9,9 +9,9 @@ from game import faction
  - award stars and check for game end (be careful)
  - make sure all actions have the right level of optionality
  - implement NumericChoice actions
+ - redo DiscreteChoice actions to be more specific
  - all of the faction abilities
   - Polania gets 2 encounters per card
-  - Crimea can spend combat cards as resources
  - structure bonuses
  - encounter cards
  - factory cards
@@ -22,7 +22,6 @@ from game import faction
 class Game:
     def __init__(self, agents):
         self.action_stack = []
-        self.board = Board()
         self.combat_cards = CombatCards()
 
         num_players = len(agents)
@@ -30,6 +29,8 @@ class Game:
         self.agents = agents
 
         factions = faction.choose(num_players)
+        self.board = Board(factions)
+
         player_mats = sorted(PlayerMat.choose(num_players))
         self.players = [Player(factions[i], player_mats[i], self.board, draw_combat_cards=self.combat_cards.draw)
                         for i in range(num_players)]
@@ -70,6 +71,13 @@ class Game:
         player.remove_power(cost.power)
         player.remove_popularity(cost.popularity)
         player.discard_lowest_combat_cards(cost.combat_cards, self.combat_cards)
+        if player.faction_name() is FactionName.CRIMEA and not player.faction.spent_combat_card_as_resource_this_turn:
+            choice = agent.choose_optional_resource_type()
+            if choice and cost.resource_cost[choice]:
+                player.faction.spent_combat_card_as_resource_this_turn = True
+                cost.reduce_by_1(choice)
+                player.discard_lowest_combat_cards(1, self.combat_cards)
+
         self.remove_n_resources_from_player(player, cost.oil, ResourceType.OIL, agent)
         self.remove_n_resources_from_player(player, cost.metal, ResourceType.METAL, agent)
         self.remove_n_resources_from_player(player, cost.wood, ResourceType.WOOD, agent)

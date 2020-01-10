@@ -51,7 +51,7 @@ class BottomAction(Action):
         current_player = game_state.current_player
         current_player.pay(self._resource_type, self._cost)
 
-        if self._enlisted:
+        if self.enlisted:
             game_state.give_player(current_player, self._enlist_benefit)
 
         left_player = game_state.get_left_player()

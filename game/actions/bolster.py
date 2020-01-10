@@ -12,7 +12,7 @@ class Bolster(TopAction):
         return Cost(coins=1)
 
     def apply(self, game_state):
-        if self._building_is_built:
+        if self._structure_is_built:
             game_state.action_stack.append(ReceiveBenefit(Benefit.POPULARITY))
         power = 3 if self._cubes_upgraded[0] else 2
         cards = 2 if self._cubes_upgraded[1] else 1

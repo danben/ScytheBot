@@ -31,7 +31,8 @@ class OnOneHex(Action):
             if space.terrain_type is TerrainType.VILLAGE:
                 ret.append(ReceiveWorkers(space.num_workers(), space))
             else:
-                ret.append(ReceiveResources(space.terrain_type.resource_type(), space.num_workers(), space, is_produce=True))
+                ret.append(ReceiveResources(space.terrain_type.resource_type(), space.num_workers(), space,
+                                            is_produce=True))
         return ret
 
 

@@ -9,7 +9,7 @@ class Trade(TopAction):
         super().__init__(num_cubes=1, structure_typ=StructureType.ARMORY)
 
     def apply(self, game_state):
-        if self._building_is_built:
+        if self._structure_is_built:
             game_state.action_stack.append(ReceiveBenefit(Benefit.POWER))
         popularity_gain = 2 if self._cubes_upgraded[0] else 1
         game_state.action_stack.append(Trade.ResourcesOrPopularity(popularity_gain=popularity_gain))
@@ -19,7 +19,7 @@ class Trade(TopAction):
             super().__init__()
             self._popularity_gain = popularity_gain
 
-        def choices(self, game_state):
+        def choices(self, _game_state):
             return [Sequence.of_list_all_optional([GetTradeResource()] * 2),
                     ReceiveBenefit(Benefit.POPULARITY, amt=self._popularity_gain)]
 

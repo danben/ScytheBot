@@ -24,9 +24,6 @@ class Piece:
     def is_worker(self):
         return self._typ is PieceType.WORKER
 
-    def is_plastic(self):
-        return self.is_mech() or self.is_character()
-
     def typ(self):
         return self._typ
 
@@ -48,7 +45,7 @@ class MovablePiece(Piece):
 class Structure(Piece):
     def __init__(self, board_space, structure_typ, faction_name):
         assert not board_space.has_structure()
-        super().__init__(self, board_space, PieceType.STRUCTURE, faction_name)
+        super().__init__(board_space, PieceType.STRUCTURE, faction_name)
         self._structure_typ = structure_typ
 
     def structure_typ(self):
