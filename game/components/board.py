@@ -213,11 +213,11 @@ _board_spaces = [
     [None, None, None, _village(), None, None, None]
 ]
 
-tunnel_spaces = [space for r in _board_spaces for space in r if space.has_tunnel()]
+tunnel_spaces = [space for r in _board_spaces for space in r if space and space.has_tunnel()]
 
-lake_spaces = [space for r in _board_spaces for space in r if space.terrain_typ is TerrainType.LAKE]
+lake_spaces = [space for r in _board_spaces for space in r if space and space.terrain_typ is TerrainType.LAKE]
 
-encounter_spaces = [space for r in _board_spaces for space in r if space.has_encounter]
+encounter_spaces = [space for r in _board_spaces for space in r if space and space.has_encounter]
 
 
 def on_the_board(row, col):
@@ -265,16 +265,17 @@ class Board:
         self.base_adjacencies = {}
         for r, row in enumerate(_board_spaces):
             for c, space in enumerate(row):
-                adjacent_spaces = []
-                for (other_r, other_c) in _board_adjacencies(r, c):
-                    other_space = _board_spaces[other_r][other_c] if _on_the_board(other_r, other_c) else None
-                    if other_space:
-                        adjacent_spaces.append(other_space)
-                    if space.has_tunnel():
-                        for tunnel_space in tunnel_spaces:
-                            if space is not tunnel_space:
-                                adjacent_spaces.append(tunnel_space)
-                self.base_adjacencies[space] = adjacent_spaces
+                if space:
+                    adjacent_spaces = []
+                    for (other_r, other_c) in _board_adjacencies(r, c):
+                        other_space = _board_spaces[other_r][other_c] if on_the_board(other_r, other_c) else None
+                        if other_space:
+                            adjacent_spaces.append(other_space)
+                        if space.has_tunnel():
+                            for tunnel_space in tunnel_spaces:
+                                if space is not tunnel_space:
+                                    adjacent_spaces.append(tunnel_space)
+                    self.base_adjacencies[space] = adjacent_spaces
         for faction_name, home_base in self.home_bases.items():
             adjacent_spaces = map(lambda x: _board_spaces[x[0]][x[1]], _home_base_adjacencies[faction_name])
             self.base_adjacencies[home_base] = adjacent_spaces
@@ -290,13 +291,13 @@ class Board:
             return (from_space, to_space) in self._blocked_by_rivers \
                    or (to_space, from_space) in self._blocked_by_rivers \
                    or (from_space is self.home_bases[FactionName.RUSVIET]
-                       and to_space.terrain_type() is TerrainType.FARM)
+                       and to_space.terrain_typ is TerrainType.FARM)
 
         self.adjacencies_accounting_for_rivers_and_lakes = {}
         for space, all_adjacent_spaces in self.base_adjacencies.items():
             adjacent_spaces = [other_space for other_space in all_adjacent_spaces
                                if not (is_blocked_by_river(space, other_space)
-                                       or other_space.terrain_typ() is TerrainType.LAKE)]
+                                       or other_space.terrain_typ is TerrainType.LAKE)]
             self.adjacencies_accounting_for_rivers_and_lakes[space] = adjacent_spaces
 
         for home_base in self.home_bases.values():

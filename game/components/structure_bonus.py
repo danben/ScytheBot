@@ -14,6 +14,10 @@ class StructureBonus(Enum):
     LONGEST_ROW_OF_STRUCTURES = 5
     FARMS_OR_TUNDRAS_WITH_STRUCTURES = 6
 
+    @staticmethod
+    def random():
+        return StructureBonus(rnd.randint(1, 6))
+
 
 def score_adjacent(board, spaces, num_spaces_to_coins):
     scores = defaultdict(int)
@@ -154,7 +158,3 @@ score_functions = {StructureBonus.NEXT_TO_TUNNELS: score_next_to_tunnels,
 
 def score(self, board):
     return score_functions[self](board)
-
-
-def random():
-    return StructureBonus(rnd.randint(1, 6))

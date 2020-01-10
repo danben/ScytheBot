@@ -1,4 +1,12 @@
-from game.actions import *
+from game.actions.bolster import Bolster
+from game.actions.build import Build
+from game.actions.deploy import Deploy
+from game.actions.enlist import Enlist
+from game.actions.movegain import MoveGain
+from game.actions.produce import Produce
+from game.actions.trade import Trade
+from game.actions.upgrade import Upgrade
+
 from game.types import PlayerMatName
 
 import numpy as np
@@ -48,6 +56,10 @@ class PlayerMat:
         self._starting_money = _starting_money[name]
         self._action_spaces = _action_spaces[name]
         self.last_action_spot_taken = None
+        self._name = name
+
+    def name(self):
+        return self._name
 
     def action_spaces(self):
         return self._action_spaces
@@ -63,4 +75,4 @@ class PlayerMat:
 
     @staticmethod
     def choose(num):
-        np.random.choice([pmn for pmn in PlayerMatName], num, replace=False)
+        return np.random.choice([pmn for pmn in PlayerMatName], num, replace=False)

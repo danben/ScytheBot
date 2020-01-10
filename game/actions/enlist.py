@@ -5,7 +5,7 @@ from game.types import Benefit, ResourceType
 
 class Enlist(BottomAction):
     def __init__(self, maxcost, mincost, payoff):
-        enlist_benefit = Benefit.COMBAT_CARD
+        enlist_benefit = Benefit.COMBAT_CARDS
         action_benefit = ChooseRecruitToEnlist()
         super().__init__(BottomActionType.ENLIST, ResourceType.FOOD, maxcost,
                          mincost, payoff, enlist_benefit, action_benefit)

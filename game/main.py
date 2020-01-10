@@ -1,4 +1,5 @@
 from game.actions import DiscreteChoice, NumericChoice, StateChange, TakeTurn
+from game.agents import RandomAgent
 from game.components import Board, CombatCards, PlayerMat, StructureBonus
 from game.exceptions import GameOver
 from game.player import Player
@@ -35,7 +36,7 @@ class Game:
         factions = faction.choose(num_players)
         self.board = Board(factions)
 
-        player_mat_names = sorted(PlayerMat.choose(num_players))
+        player_mat_names = sorted(PlayerMat.choose(num_players), key=lambda x:x.value)
         self.players = [Player(factions[i], player_mat_names[i], self.board, draw_combat_cards=self.combat_cards.draw)
                         for i in range(num_players)]
         self.players_by_faction = {}
@@ -146,3 +147,8 @@ class Game:
 
             for (player, score) in player_scores.items():
                 print(f'{player} scored {score} points')
+
+
+if __name__ == '__main__':
+    game = Game([RandomAgent(), RandomAgent()])
+    game.play()
