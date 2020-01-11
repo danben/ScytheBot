@@ -3,12 +3,15 @@ from game.actions.dsl import *
 from game.actions.misc import Cost, ReceiveBenefit, ReceiveResources
 from game.types import Benefit, ResourceType, StructureType
 
+import logging
+
 
 class Trade(TopAction):
     def __init__(self):
         super().__init__(num_cubes=1, structure_typ=StructureType.ARMORY)
 
     def apply(self, game_state):
+        logging.debug("Space chosen: Trade")
         if self._structure_is_built:
             game_state.action_stack.append(ReceiveBenefit(Benefit.POWER))
         popularity_gain = 2 if self._cubes_upgraded[0] else 1

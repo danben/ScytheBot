@@ -2,6 +2,8 @@ from game.actions.base import *
 from game.actions.misc import Cost, ReceiveResources, ReceiveWorkers
 from game.types import StructureType, TerrainType
 
+import logging
+
 
 class Produce(TopAction):
     def __init__(self):
@@ -15,6 +17,7 @@ class Produce(TopAction):
         return Cost(power=power, popularity=popularity, coins=coins)
 
     def apply(self, game_state):
+        logging.debug("Space chosen: Produce")
         produce_actions = [OnOneHex(), OnOneHex()]
         if self._cubes_upgraded[0]:
             produce_actions.append(OnOneHex())
@@ -23,7 +26,7 @@ class Produce(TopAction):
         game_state.action_stack.append(Sequence.of_list_all_optional(produce_actions))
 
 
-class OnOneHex(Action):
+class OnOneHex(DiscreteChoice):
     @staticmethod
     def choices(game_state):
         ret = []
@@ -36,7 +39,7 @@ class OnOneHex(Action):
         return ret
 
 
-class OnMillHex(Action):
+class OnMillHex(StateChange):
     def apply(self, game_state):
         space = game_state.current_player.mill_space()
         assert space is not None

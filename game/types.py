@@ -44,6 +44,16 @@ class ResourceType(Enum):
     OIL = 3
     FOOD = 4
 
+    def __repr__(self):
+        if self is ResourceType.WOOD:
+            return "wood"
+        elif self is ResourceType.METAL:
+            return "metal"
+        elif self is ResourceType.OIL:
+            return "oil"
+        elif self is ResourceType.FOOD:
+            return "food"
+
 
 class StarType(Enum):
     UPGRADE = 1

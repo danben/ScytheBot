@@ -1,3 +1,4 @@
+from game import faction
 from game.actions import DiscreteChoice, NumericChoice, StateChange, TakeTurn
 from game.agents import RandomAgent
 from game.components import Board, CombatCards, PlayerMat, StructureBonus
@@ -5,7 +6,9 @@ from game.exceptions import GameOver
 from game.player import Player
 from game.types import Benefit, FactionName, ResourceType
 
-from game import faction
+import game.components.structure_bonus as structure_bonus
+import logging
+logging.basicConfig(level=logging.DEBUG)
 
 ''' TODO list
  - fix BottomAction.apply: enlist benefits happen after the current player finishes their action
@@ -36,7 +39,7 @@ class Game:
         factions = faction.choose(num_players)
         self.board = Board(factions)
 
-        player_mat_names = sorted(PlayerMat.choose(num_players), key=lambda x:x.value)
+        player_mat_names = sorted(PlayerMat.choose(num_players), key=lambda x: x.value)
         self.players = [Player(factions[i], player_mat_names[i], self.board, draw_combat_cards=self.combat_cards.draw)
                         for i in range(num_players)]
         self.players_by_faction = {}
@@ -61,7 +64,8 @@ class Game:
             new_idx = 0
         return self.players[new_idx]
 
-    def remove_n_resources_from_player(self, player, n, resource_typ, agent):
+    @staticmethod
+    def remove_n_resources_from_player(player, n, resource_typ, agent):
         eligible_spaces = player.controlled_spaces_with_resource(resource_typ)
         for _ in range(n):
             # TODO: Separate GameState from Game so Agent doesn't need to depend on Game
@@ -70,7 +74,7 @@ class Game:
             # options and the choices being presented. At least use a canonical ordering.
             # Ok, here's an idea - let's feed information about the choices into the neural net. Then we can
             # even get rid of [choose_optional_resource_type].
-            space = agent.choose_from(self, list(eligible_spaces))
+            space = agent.choose_from(list(eligible_spaces))
             space.remove_resources(resource_typ)
             if not space.has_resource(resource_typ):
                 eligible_spaces.remove(space)
@@ -88,10 +92,8 @@ class Game:
                 cost.reduce_by_1(choice)
                 player.discard_lowest_combat_cards(1, self.combat_cards)
 
-        self.remove_n_resources_from_player(player, cost.oil, ResourceType.OIL, agent)
-        self.remove_n_resources_from_player(player, cost.metal, ResourceType.METAL, agent)
-        self.remove_n_resources_from_player(player, cost.wood, ResourceType.WOOD, agent)
-        self.remove_n_resources_from_player(player, cost.food, ResourceType.FOOD, agent)
+        for resource_typ in ResourceType:
+            Game.remove_n_resources_from_player(player, cost.resource_cost[resource_typ], resource_typ, agent)
 
     def give_reward_to_player(self, player, benefit, amt):
         if benefit is Benefit.POPULARITY:
@@ -105,9 +107,13 @@ class Game:
             player.add_combat_cards(new_cards)
 
     def play(self):
+        num_turns = 0
         try:
             while True:
                 self.current_player = self.players[self.current_player_idx]
+                logging.debug(f'Next player: {self.current_player.faction_name()} / '
+                              f'{self.current_player.player_mat.name()}')
+                logging.debug(f'{self.current_player.to_string()}')
                 self.action_stack.append(TakeTurn())
                 agent = self.agents[self.current_player_idx]
                 while self.action_stack:
@@ -120,13 +126,18 @@ class Game:
 
                     if isinstance(next_action, StateChange):
                         next_action.apply(self)
-                    elif isinstance(next_action, DiscreteChoice):
+                    if isinstance(next_action, DiscreteChoice):
                         choices = next_action.choices(self)
                         # We're probably going to need to replace the choosing mechanism altogether.
                         # The agent should know the kind of thing that it's choosing from.
                         if choices:
-                            self.action_stack.append(agent.choose_from(choices))
-                    elif isinstance(next_action, NumericChoice):
+                            logging.debug(f'Choices: {choices}')
+                            choice = agent.choose_from(choices)
+                            logging.debug(f'Chosen: {choice}')
+                            self.action_stack.append(choice)
+                        else:
+                            logging.debug('No choices? Thats weird')
+                    if isinstance(next_action, NumericChoice):
                         ''' TODO: Implement this '''
                         pass
 
@@ -139,9 +150,12 @@ class Game:
                 self.current_player_idx += 1
                 if self.current_player_idx == len(self.players):
                     self.current_player_idx = 0
+                num_turns += 1
+                if num_turns == 50:
+                    raise GameOver()
         except GameOver:
             player_scores = {faction_name: player.score() for faction_name, player in self.players_by_faction.items()}
-            structure_bonus_scores = self.structure_bonus.score(self.board)
+            structure_bonus_scores = structure_bonus.score(self.structure_bonus, self.board)
             for faction_name, structure_bonus_score in structure_bonus_scores.items():
                 player_scores[faction_name] += structure_bonus_score
 

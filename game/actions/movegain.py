@@ -5,12 +5,15 @@ from game.constants import MAX_COMBAT_POWER
 from game.faction import Nordic
 from game.types import Benefit, FactionName, ResourceType, StarType, StructureType
 
+import logging
+
 
 class MoveGain(TopAction):
     def __init__(self):
         super().__init__(num_cubes=2, structure_typ=StructureType.MINE)
 
     def choices(self, _game_state):
+        logging.debug("Space chosen: Move/Gain")
         move = Sequence.of_list_all_optional([Move(), Move()])
         if self._cubes_upgraded[0]:
             move = Sequence.of_list([Optional(Move()), move, MaybeCombat()])
@@ -59,7 +62,7 @@ class Move(DiscreteChoice):
         # check to see that we're not starting in enemy territory. There would be no legal way for a mech
         # or character to start in enemy territory anyway.
         return [Move.move_one_piece(piece, game_state)
-                for piece in game_state.current_player().movable_pieces()
+                for piece in game_state.current_player.movable_pieces()
                 if piece.board_space.controller() is game_state.current_player]
 
 

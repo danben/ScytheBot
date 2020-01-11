@@ -1,3 +1,6 @@
+import logging
+
+
 class Action:
     def __init__(self):
         pass
@@ -30,11 +33,15 @@ class StateChange(Action):
         pass
 
 
-class Nothing(Action):
-    pass
+class Nothing(StateChange):
+    def __init__(self):
+        super().__init__()
+
+    def apply(self, game_state):
+        logging.debug(f'{game_state.current_player.faction_name()} does nothing')
 
 
-class Optional(Action):
+class Optional(DiscreteChoice):
     def __init__(self, action):
         super().__init__()
         self._action = action
@@ -43,7 +50,7 @@ class Optional(Action):
         return [Nothing(), self._action]
 
 
-class Sequence(Action):
+class Sequence(StateChange):
     def __init__(self, action1, action2):
         super().__init__()
         self._action1 = action1

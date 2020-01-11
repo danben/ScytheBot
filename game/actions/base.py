@@ -2,13 +2,21 @@ from enum import Enum
 from game.actions.dsl import *
 from game.actions.misc import Cost
 
+import logging
 
-class TopAction(Action):
+
+class TopAction(DiscreteChoice, StateChange):
     def __init__(self, num_cubes, structure_typ):
         super().__init__()
         self._structure_is_built = False
         self._structure_typ = structure_typ
         self._cubes_upgraded = [False] * num_cubes
+
+    def apply(self, _game_state):
+        pass
+
+    def choices(self, _game_state):
+        return []
 
     def structure_typ(self):
         return self._structure_typ
@@ -35,7 +43,7 @@ class BottomActionType(Enum):
     ENLIST = 4
 
 
-class BottomAction(Action):
+class BottomAction(StateChange):
     def __init__(self, typ, resource_type, maxcost, mincost, payoff, enlist_benefit, action_benefit):
         super().__init__()
         self._typ = typ
@@ -48,6 +56,7 @@ class BottomAction(Action):
         self._action_benefit = action_benefit
 
     def apply(self, game_state):
+        logging.debug('Attempting bottom action: {self._typ}')
         current_player = game_state.current_player
         current_player.pay(self._resource_type, self._cost)
 

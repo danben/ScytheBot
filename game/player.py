@@ -6,6 +6,7 @@ from game.components.player_mat import PlayerMat
 from game.exceptions import GameOver
 from collections import defaultdict
 
+import logging
 import numpy as np
 
 
@@ -27,6 +28,9 @@ class Stars:
             assert self.count < 7
             if self.count == 6:
                 raise GameOver()
+
+    def __repr__(self):
+        return self._achieved.__repr__()
 
 
 def combat_cards_dict(combat_cards):
@@ -65,6 +69,9 @@ class Player:
 
         self.faction.add_faction_specific_adjacencies(self._adjacencies, board.base_adjacencies)
 
+    def to_string(self):
+        return f'Stars: {self.stars}; Score: {self.score()}'
+
     def score(self):
         star_score, territory_score, resource_pair_score = 3, 2, 1
         if self.popularity() > 6:
@@ -76,7 +83,7 @@ class Player:
             territory_score += 1
             resource_pair_score += 1
         return star_score * self.stars.count + territory_score * self.territory_count() \
-            + resource_pair_score * self.resource_pair_count()
+            + resource_pair_score * self.resource_pair_count() + self._coins
 
     def faction_name(self):
         return self.faction.name
@@ -193,12 +200,12 @@ class Player:
     def spaces_with_workers(self):
         ret = set([worker.board_space for worker in self._workers
                    if worker.board_space.terrain_typ is not TerrainType.LAKE])
-        ret.remove(self.home_base)
+        ret.discard(self.home_base)
         return ret
 
     def spaces_with_mechs(self):
         ret = set([mech.board_space for mech in self._deployed_mechs])
-        ret.remove(self.home_base)
+        ret.discard(self.home_base)
         return ret
 
     def spaces_with_structures(self):
@@ -211,13 +218,19 @@ class Player:
     def controlled_spaces(self):
         s = self.spaces_with_workers() | self.spaces_with_mechs()
         s.add(self._character.board_space)
-        s.remove(self.home_base)
+        s.discard(self.home_base)
+        to_remove = []
         for space in s:
             if space.controller is not self:
-                s.remove(space)
+                to_remove.append(space)
+        for space in to_remove:
+            s.remove(space)
+        to_add = []
         for space in self.spaces_with_structures():
             if space.controller() is self:
-                s.add(space)
+                to_add.append(space)
+        for space in to_add:
+            s.add(space)
         return s
 
     def territory_count(self):
@@ -311,16 +324,23 @@ class Player:
         return int(num_resources / 2)
 
     def can_pay_cost(self, cost):
-        return (self._power >= cost.power
+        total_combat_cards = self.total_combat_cards()
+        if not (self._power >= cost.power
                 and self._popularity >= cost.popularity
                 and self._coins >= cost.coins
-                and self.available_resources(ResourceType.WOOD) >= cost.wood
-                and self.available_resources(ResourceType.OIL) >= cost.oil
-                and self.available_resources(ResourceType.METAL) >= cost.metal
-                and self.available_resources(ResourceType.FOOD) >= cost.food
-                and self.total_combat_cards >= cost.combat_cards)
+                and total_combat_cards >= cost.combat_cards):
+            return False
+        if self.faction_name() is FactionName.CRIMEA:
+            has_extra_combat_cards = total_combat_cards - cost.combat_cards > 0
+            num_missing_resources = sum([self.available_resources(resource_typ) - cost.resource_cost[resource_typ]
+                                         for resource_typ in ResourceType])
+            return has_extra_combat_cards and num_missing_resources <= 1
+        else:
+            return all([self.available_resources(resource_typ) >= cost.resource_cost[resource_typ]
+                       for resource_typ in ResourceType])
 
     def mill_space(self):
+        logging.debug(f'{type(self._structures)}')
         return self._structures[StructureType.MILL]
 
     def produceable_spaces(self):

@@ -3,20 +3,8 @@ from game.types import TerrainType
 
 from collections import defaultdict
 from enum import Enum
+
 import random as rnd
-
-
-class StructureBonus(Enum):
-    NEXT_TO_TUNNELS = 1
-    NEXT_TO_LAKES = 2
-    NEXT_TO_ENCOUNTERS = 3
-    ON_TUNNELS = 4
-    LONGEST_ROW_OF_STRUCTURES = 5
-    FARMS_OR_TUNDRAS_WITH_STRUCTURES = 6
-
-    @staticmethod
-    def random():
-        return StructureBonus(rnd.randint(1, 6))
 
 
 def score_adjacent(board, spaces, num_spaces_to_coins):
@@ -27,7 +15,7 @@ def score_adjacent(board, spaces, num_spaces_to_coins):
             if other_space.structure and not marked[other_space.structure.faction_name]:
                 scores[other_space.structure.faction_name] += 1
                 marked[other_space.structure.faction_name] = True
-                
+
     return {faction: num_spaces_to_coins(num_spaces) for faction, num_spaces in scores.items()}
 
 
@@ -36,7 +24,7 @@ def score_on_top_of(spaces, num_spaces_to_coins):
     for space in spaces:
         if space.structure:
             scores[space.structure.faction_name] += 1
-            
+
     return {faction: num_spaces_to_coins(num_spaces) for faction, num_spaces in scores.items()}
 
 
@@ -52,7 +40,7 @@ def score_next_to_tunnels(board):
             return 2
         else:
             return 0
-    
+
     return score_adjacent(board, bd.tunnel_spaces, num_spaces_to_coins)
 
 
@@ -145,7 +133,20 @@ def score_farms_or_tundras_with_structures(board):
 
     farms_and_tundras = [space for space in board.base_adjacencies.keys()
                          if space.terrain_typ is TerrainType.FARM or space.terrain_typ is TerrainType.TUNDRA]
-    return score_on_top_of(farms_and_tundras, num_spaces_to_coins)
+    return StructureBonus.score_on_top_of(farms_and_tundras, num_spaces_to_coins)
+
+
+class StructureBonus(Enum):
+    NEXT_TO_TUNNELS = 1
+    NEXT_TO_LAKES = 2
+    NEXT_TO_ENCOUNTERS = 3
+    ON_TUNNELS = 4
+    LONGEST_ROW_OF_STRUCTURES = 5
+    FARMS_OR_TUNDRAS_WITH_STRUCTURES = 6
+
+    @staticmethod
+    def random():
+        return StructureBonus(rnd.randint(1, 6))
 
 
 score_functions = {StructureBonus.NEXT_TO_TUNNELS: score_next_to_tunnels,
@@ -156,5 +157,5 @@ score_functions = {StructureBonus.NEXT_TO_TUNNELS: score_next_to_tunnels,
                    StructureBonus.FARMS_OR_TUNDRAS_WITH_STRUCTURES: score_farms_or_tundras_with_structures}
 
 
-def score(self, board):
-    return score_functions[self](board)
+def score(structure_bonus, board):
+    return score_functions[structure_bonus](board)

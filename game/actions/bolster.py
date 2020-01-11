@@ -3,6 +3,8 @@ from game.actions.dsl import *
 from game.actions.misc import Cost, ReceiveBenefit
 from game.types import Benefit, StructureType
 
+import logging
+
 
 class Bolster(TopAction):
     def __init__(self):
@@ -12,6 +14,7 @@ class Bolster(TopAction):
         return Cost(coins=1)
 
     def apply(self, game_state):
+        logging.debug("Space chosen: Bolster")
         if self._structure_is_built:
             game_state.action_stack.append(ReceiveBenefit(Benefit.POPULARITY))
         power = 3 if self._cubes_upgraded[0] else 2

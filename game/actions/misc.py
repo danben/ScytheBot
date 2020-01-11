@@ -53,6 +53,17 @@ class Cost:
         self.resource_cost = {ResourceType.METAL: metal, ResourceType.OIL: oil, ResourceType.WOOD: wood,
                               ResourceType.FOOD: food}
 
+    def __repr__(self):
+        strings = []
+        strings.append(f'{self.power} power; ' if self.power else '')
+        strings.append(f'{self.popularity} popularity; ' if self.popularity else '')
+        strings.append(f'{self.combat_cards} combat cards; ' if self.combat_cards else '')
+        strings.append(f'{self.coins} coins; ' if self.coins else '')
+        for resource_typ in ResourceType:
+            strings.append(f'{self.resource_cost[resource_typ]} {resource_typ!r}; '
+                           if self.resource_cost[resource_typ] else '')
+        return ''.join(strings)
+
     @staticmethod
     def of_resource_type(resource_typ, amt):
         if resource_typ is ResourceType.METAL:
