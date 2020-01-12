@@ -1,4 +1,7 @@
+from collections import defaultdict
 from enum import Enum
+
+import logging
 
 
 class Benefit(Enum):
@@ -78,11 +81,17 @@ class TerrainType(Enum):
     HOME_BASE = 8
 
     def resource_type(self):
-        if self is TerrainType.MOUNTAIN:
-            return ResourceType.METAL
-        elif self is TerrainType.TUNDRA:
-            return ResourceType.OIL
-        elif self is TerrainType.FARM:
-            return ResourceType.FOOD
-        elif self is TerrainType.FOREST:
-            return ResourceType.WOOD
+        if self is TerrainType.MOUNTAIN: return ResourceType.METAL
+        elif self is TerrainType.TUNDRA: return ResourceType.OIL
+        elif self is TerrainType.FARM: return ResourceType.FOOD
+        elif self is TerrainType.FOREST: return ResourceType.WOOD
+
+    def __repr__(self):
+        if self is TerrainType.MOUNTAIN: return "mountain"
+        elif self is TerrainType.TUNDRA: return "tundra"
+        elif self is TerrainType.FARM: return "farm"
+        elif self is TerrainType.FOREST: return "forest"
+        elif self is TerrainType.VILLAGE: return "village"
+        elif self is TerrainType.FACTORY: return "factory"
+        elif self is TerrainType.LAKE: return "lake"
+        elif self is TerrainType.HOME_BASE: return "home base"

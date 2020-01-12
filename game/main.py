@@ -121,6 +121,7 @@ class Game:
                     cost = next_action.cost(self)
                     if cost:
                         if not self.current_player.can_pay_cost(cost):
+                            logging.debug(f'Cant afford {cost} so skipping')
                             continue
                         self.charge_player(self.current_player, cost, agent)
 
@@ -131,12 +132,9 @@ class Game:
                         # We're probably going to need to replace the choosing mechanism altogether.
                         # The agent should know the kind of thing that it's choosing from.
                         if choices:
-                            logging.debug(f'Choices: {choices}')
                             choice = agent.choose_from(choices)
                             logging.debug(f'Chosen: {choice}')
                             self.action_stack.append(choice)
-                        else:
-                            logging.debug('No choices? Thats weird')
                     if isinstance(next_action, NumericChoice):
                         ''' TODO: Implement this '''
                         pass
@@ -151,7 +149,8 @@ class Game:
                 if self.current_player_idx == len(self.players):
                     self.current_player_idx = 0
                 num_turns += 1
-                if num_turns == 50:
+                if num_turns == 500:
+                    logging.debug("500 turns without a winner")
                     raise GameOver()
         except GameOver:
             player_scores = {faction_name: player.score() for faction_name, player in self.players_by_faction.items()}

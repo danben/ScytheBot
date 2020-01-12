@@ -16,7 +16,6 @@ class TakeTurn(DiscreteChoice):
             action_combos = [(i, action_combo) for i, action_combo in enumerate(player_mat.action_spaces())
                              if player_mat.last_action_spot_taken != i]
 
-        logging.debug(f'Choice of actions: {action_combos}')
         return [Sequence.of_list([MovePawn(i), Optional(action_combo[0]), Optional(action_combo[1])])
                 for i, action_combo in action_combos]
 
@@ -27,5 +26,4 @@ class MovePawn(StateChange):
         self._new_spot = new_spot
 
     def apply(self, game_state):
-        logging.debug(f'Chose action spot {self._new_spot}')
         game_state.current_player.player_mat.move_pawn_to(self._new_spot)

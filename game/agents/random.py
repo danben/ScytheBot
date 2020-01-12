@@ -10,7 +10,6 @@ class RandomAgent(Agent):
 
     def choose_from(self, choices):
         choice = np.random.choice(choices)
-        # logging.debug(f'Random choice: {choice}')
         return choice
 
     def choose_numeric(self, low, high):

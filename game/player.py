@@ -62,7 +62,7 @@ class Player:
         self.home_base.characters.add(self._character)
         self._enlist_rewards = {benefit: False for benefit in Benefit}
         self.mech_slots = [False] * constants.NUM_MECHS
-        self._structures = defaultdict()
+        self._structures = defaultdict(lambda: None)
         self._adjacencies = {PieceType.CHARACTER: board.adjacencies_accounting_for_rivers_and_lakes.copy(),
                              PieceType.MECH: board.adjacencies_accounting_for_rivers_and_lakes.copy(),
                              PieceType.WORKER: board.adjacencies_accounting_for_rivers_and_lakes.copy()}
@@ -108,6 +108,7 @@ class Player:
                             my_adjacencies.append(space)
 
     def add_power(self, power):
+        logging.debug(f'{self!r} receives {power} power')
         self._power = min(self._power + power, constants.MAX_POWER)
         if self._power == constants.MAX_POWER:
             self.stars.achieve(StarType.POWER)
@@ -119,12 +120,14 @@ class Player:
         return self._power
 
     def add_coins(self, coins):
+        logging.debug(f'{self!r} receives {coins} coins')
         self._coins += coins
 
     def remove_coins(self, coins):
         self._coins = max(self._coins - coins, 0)
 
     def add_popularity(self, popularity):
+        logging.debug(f'{self!r} receives {popularity} popularity')
         self._popularity = min(self._popularity + popularity, constants.MAX_POPULARITY)
         if self._popularity == constants.MAX_POPULARITY:
             self.stars.achieve(StarType.POPULARITY)
@@ -142,6 +145,7 @@ class Player:
         return [i for i in range(constants.MIN_COMBAT_CARD, constants.MAX_COMBAT_CARD + 1) if self._combat_cards[i]]
 
     def add_combat_cards(self, cards):
+        logging.debug(f'{self!r} receives {len(cards)} combat cards')
         for card in cards:
             self._combat_cards[card] += 1
 
@@ -168,6 +172,9 @@ class Player:
         card = np.random.choice(all_combat_card_values, p=proportions)
         self._combat_cards[card] -= 1
         return card
+
+    def available_workers(self):
+        return constants.NUM_WORKERS - len(self._workers)
 
     def add_worker(self, board_space):
         assert len(self._workers) < constants.NUM_WORKERS
@@ -299,6 +306,7 @@ class Player:
         return ret
 
     def deploy_mech(self, mech, space, board):
+        logging.debug(f'{self!r} deploys mech {mech} to {space!r}')
         self.mech_slots[mech] = True
         new_mech = Mech(space, self)
         self._deployed_mechs.add(new_mech)
@@ -348,9 +356,12 @@ class Player:
         mill_space = self.mill_space()
         if mill_space:
             spaces.add(mill_space)
+        to_remove = []
         for space in spaces:
-            if space.produced_on_this_turn:
-                spaces.remove(space)
+            if space.produced_this_turn:
+                to_remove.append(space)
+        for space in to_remove:
+            spaces.remove(space)
         return spaces
 
     def movable_pieces(self):

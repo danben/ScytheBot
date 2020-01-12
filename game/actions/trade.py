@@ -17,7 +17,7 @@ class Trade(TopAction):
         popularity_gain = 2 if self._cubes_upgraded[0] else 1
         game_state.action_stack.append(Trade.ResourcesOrPopularity(popularity_gain=popularity_gain))
 
-    class ResourcesOrPopularity(Action):
+    class ResourcesOrPopularity(DiscreteChoice):
         def __init__(self, popularity_gain):
             super().__init__()
             self._popularity_gain = popularity_gain
@@ -37,4 +37,4 @@ class GetTradeResource(DiscreteChoice):
     def choices(self, game_state):
         return [ReceiveResources(typ=resource_typ, amt=1, space=board_space)
                 for resource_typ in ResourceType
-                for board_space in game_state.next_player.spaces_with_workers()]
+                for board_space in game_state.current_player.spaces_with_workers()]

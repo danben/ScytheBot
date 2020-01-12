@@ -2,7 +2,7 @@ from game.actions.base import *
 from game.types import ResourceType
 
 
-class ReceiveBenefit(Action):
+class ReceiveBenefit(StateChange):
     def __init__(self, typ, amt=1):
         super().__init__()
         self._typ = typ
@@ -16,7 +16,7 @@ class ReceiveBenefit(Action):
         return Optional(ReceiveBenefit(typ, amt))
 
 
-class ReceiveResources(Action):
+class ReceiveResources(StateChange):
     def __init__(self, typ, amt, space, is_produce=False):
         super().__init__()
         self._typ = typ
@@ -25,19 +25,21 @@ class ReceiveResources(Action):
         self._is_produce = is_produce
 
     def apply(self, game_state):
-        game_state.board.place_resources_at(self._typ, self._amt, self._space)
+        logging.debug(f'Receive {self._amt} {self._typ!r} on space {self._space!r}')
+        self._space.add_resources(self._typ, self._amt)
         if self._is_produce:
-            game_state.spaces_produced_on_this_turn.add(self._space)
+            game_state.spaces_produced_this_turn.add(self._space)
             self._space.produced_this_turn = True
 
 
-class ReceiveWorkers(Action):
+class ReceiveWorkers(StateChange):
     def __init__(self, amt, space):
         super().__init__()
         self._amt = amt
         self._space = space
 
     def apply(self, game_state):
+        logging.debug(f'Receive {self._amt} workers on space {self._space!r}')
         for _ in range(self._amt):
             game_state.current_player.add_worker(self._space)
         game_state.spaces_produced_this_turn.add(self._space)

@@ -17,7 +17,8 @@ ALL_RIVERS = {((0, 3), (1, 3)), ((0, 3), (0, 4)), ((0, 4), (1, 3)), ((0, 5), (0,
 
 
 class BoardSpace:
-    def __init__(self, terrain_typ, has_encounter=False, has_tunnel=False):
+    def __init__(self, coords, terrain_typ, has_encounter=False, has_tunnel=False):
+        self._coords = coords
         self.terrain_typ = terrain_typ
         self.characters = set()
         self.mechs = set()
@@ -28,6 +29,12 @@ class BoardSpace:
         self._has_tunnel = has_tunnel
         self.structure = None
         self.produced_this_turn = False
+
+    def __repr__(self):
+        if self._coords:
+            return f'{self.terrain_typ!r} : {self._coords}'
+        else:
+            return f'{self.terrain_typ!r}'
 
     def combat_factions(self):
         factions = set()
@@ -159,37 +166,37 @@ class BoardSpace:
                 ret.append(worker)
 
 
-def _mountain(has_encounter=False, has_tunnel=False):
-    return BoardSpace(TerrainType.MOUNTAIN, has_encounter, has_tunnel)
+def _mountain(coords, has_encounter=False, has_tunnel=False):
+    return BoardSpace(coords, TerrainType.MOUNTAIN, has_encounter, has_tunnel)
 
 
-def _farm(has_encounter=False, has_tunnel=False):
-    return BoardSpace(TerrainType.FARM, has_encounter, has_tunnel)
+def _farm(coords, has_encounter=False, has_tunnel=False):
+    return BoardSpace(coords, TerrainType.FARM, has_encounter, has_tunnel)
 
 
-def _village(has_encounter=False, has_tunnel=False):
-    return BoardSpace(TerrainType.VILLAGE, has_encounter, has_tunnel)
+def _village(coords, has_encounter=False, has_tunnel=False):
+    return BoardSpace(coords, TerrainType.VILLAGE, has_encounter, has_tunnel)
 
 
-def _tundra(has_encounter=False, has_tunnel=False):
-    return BoardSpace(TerrainType.TUNDRA, has_encounter, has_tunnel)
+def _tundra(coords, has_encounter=False, has_tunnel=False):
+    return BoardSpace(coords, TerrainType.TUNDRA, has_encounter, has_tunnel)
 
 
-def _forest(has_encounter=False, has_tunnel=False):
-    return BoardSpace(TerrainType.FOREST, has_encounter, has_tunnel)
+def _forest(coords, has_encounter=False, has_tunnel=False):
+    return BoardSpace(coords, TerrainType.FOREST, has_encounter, has_tunnel)
 
 
-def _lake():
-    return BoardSpace(TerrainType.LAKE)
+def _lake(coords):
+    return BoardSpace(coords, TerrainType.LAKE)
 
 
-def _factory():
-    return BoardSpace(TerrainType.FACTORY)
+def _factory(coords):
+    return BoardSpace(coords, TerrainType.FACTORY)
 
 
 class HomeBase(BoardSpace):
     def __init__(self, is_active):
-        super().__init__(TerrainType.HOME_BASE)
+        super().__init__(None, TerrainType.HOME_BASE)
         self.is_active = is_active
 
 
@@ -197,20 +204,23 @@ def _home_base(is_active):
     return HomeBase(is_active)
 
 
-THE_FACTORY = _factory()
+THE_FACTORY = _factory((3,3))
 
 _board_spaces = [
-    [None, _mountain(), _farm(), _village(has_encounter=True), _forest(), _tundra(), _village()],
-    [_lake(), _tundra(has_encounter=True), _lake(), _tundra(has_tunnel=True), _mountain(has_encounter=True), _farm(),
-     _farm(has_encounter=True)],
-    [None, _forest(), _mountain(has_tunnel=True), _forest(), _lake(), _forest(has_tunnel=True), _village()],
-    [_farm(), _village(), _lake(), THE_FACTORY, _mountain(), _tundra(has_encounter=True), _mountain()],
-    [_forest(has_encounter=True), _forest(), _farm(has_tunnel=True), _tundra(), _lake(), _village(has_tunnel=True),
-     _lake()],
-    [_mountain(), _village(has_encounter=True), _village(has_encounter=True), _tundra(has_tunnel=True), _forest(),
-     _mountain(has_encounter=True), _tundra()],
-    [None, _tundra(), _lake(), _farm(), _mountain(has_encounter=True), _village(), _farm()],
-    [None, None, None, _village(), None, None, None]
+    [None, _mountain((0, 1)), _farm((0, 2)), _village((0, 3), has_encounter=True), _forest((0, 4)), _tundra((0, 5)),
+     _village((0, 6))],
+    [_lake((1, 0)), _tundra((1, 1), has_encounter=True), _lake((1, 2)), _tundra((1, 3), has_tunnel=True),
+     _mountain((1, 4), has_encounter=True), _farm((1, 5)), _farm((1, 6), has_encounter=True)],
+    [None, _forest((2, 1)), _mountain((2, 2), has_tunnel=True), _forest((2, 3)), _lake((2, 4)),
+     _forest((2, 5), has_tunnel=True), _village((2, 6))],
+    [_farm((3, 0)), _village((3, 1)), _lake((3, 2)), THE_FACTORY, _mountain((3, 4)), _tundra((3, 5),
+     has_encounter=True), _mountain((3, 6))],
+    [_forest((4, 0), has_encounter=True), _forest((4, 1)), _farm((4, 2), has_tunnel=True), _tundra((4, 3)),
+     _lake((4, 4)), _village((4, 5), has_tunnel=True), _lake((4, 6))],
+    [_mountain((5, 0)), _village((5, 1), has_encounter=True), _village((5, 2), has_encounter=True),
+     _tundra((5, 3), has_tunnel=True), _forest((5, 4)), _mountain((5, 5), has_encounter=True), _tundra((5, 6))],
+    [None, _tundra((6, 1)), _lake((6, 2)), _farm((6, 3)), _mountain((6, 4), has_encounter=True), _village((6, 5)), _farm((6, 6))],
+    [None, None, None, _village((7, 3)), None, None, None]
 ]
 
 tunnel_spaces = [space for r in _board_spaces for space in r if space and space.has_tunnel()]

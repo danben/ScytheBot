@@ -133,7 +133,7 @@ def score_farms_or_tundras_with_structures(board):
 
     farms_and_tundras = [space for space in board.base_adjacencies.keys()
                          if space.terrain_typ is TerrainType.FARM or space.terrain_typ is TerrainType.TUNDRA]
-    return StructureBonus.score_on_top_of(farms_and_tundras, num_spaces_to_coins)
+    return score_on_top_of(farms_and_tundras, num_spaces_to_coins)
 
 
 class StructureBonus(Enum):

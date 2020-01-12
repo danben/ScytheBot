@@ -31,10 +31,12 @@ class OnOneHex(DiscreteChoice):
     def choices(game_state):
         ret = []
         for space in game_state.current_player.produceable_spaces():
-            if space.terrain_type is TerrainType.VILLAGE:
-                ret.append(ReceiveWorkers(space.num_workers(), space))
+            num_workers = len(space.workers)
+            if space.terrain_typ is TerrainType.VILLAGE:
+                num_workers = min(num_workers, game_state.current_player.available_workers())
+                ret.append(ReceiveWorkers(num_workers, space))
             else:
-                ret.append(ReceiveResources(space.terrain_type.resource_type(), space.num_workers(), space,
+                ret.append(ReceiveResources(space.terrain_typ.resource_type(), num_workers, space,
                                             is_produce=True))
         return ret
 
@@ -46,8 +48,8 @@ class OnMillHex(StateChange):
         if not space.produced_this_turn:
             game_state.spaces_produced_this_turn.add(space)
             space.produced_this_turn = True
-            typ = space.terrain_type
-            amt = space.num_workers()
+            typ = space.terrain_typ
+            amt = len(space.workers)
             if typ is TerrainType.VILLAGE:
                 ReceiveWorkers(amt, space).apply(game_state)
             else:
