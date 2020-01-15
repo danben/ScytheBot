@@ -2,13 +2,16 @@ from game import constants
 from game.types import FactionName, StructureType, TerrainType
 from collections import defaultdict
 
+import logging
+
 # Each pair of coordinate pairs represents two hexes that are separated by a river.
 ALL_RIVERS = {((0, 3), (1, 3)), ((0, 3), (0, 4)), ((0, 4), (1, 3)), ((0, 5), (0, 6)), ((0, 5), (1, 5)),
               ((1, 1), (2, 1)), ((1, 3), (1, 4)), ((1, 4), (1, 5)), ((1, 4), (2, 5)), ((1, 5), (2, 6)),
               ((1, 6), (2, 6)), ((2, 1), (2, 2)), ((2, 2), (3, 1)), ((2, 5), (2, 6)), ((2, 5), (3, 5)),
               ((3, 0), (4, 0)), ((3, 0), (4, 1)), ((3, 1), (4, 1)), ((3, 1), (4, 2)), ((3, 4), (3, 5)),
-              ((4, 0), (5, 0)), ((4, 1), (5, 0)), ((4, 1), (5, 1)), ((4, 2), (5, 1)), ((5, 1), (5, 2)),
-              ((5, 2), (6, 3)), ((5, 3), (6, 3)), ((5, 3), (6, 4)), ((5, 4), (6, 4)), ((6, 4), (6, 5))}
+              ((3, 5), (4, 5)), ((4, 0), (5, 0)), ((4, 1), (5, 0)), ((4, 1), (5, 1)), ((4, 2), (5, 1)),
+              ((5, 1), (5, 2)), ((5, 2), (6, 3)), ((5, 3), (6, 3)), ((5, 3), (6, 4)), ((5, 4), (6, 4)),
+              ((6, 4), (6, 5))}
 
 
 ''' Adjacency should be a function of piece and board space. Adjacencies should be precomputed on launch
@@ -69,6 +72,7 @@ class BoardSpace:
                 candidates.add(mech.faction_name)
 
         if len(candidates) > 1:
+            logging.error(f'Multiple controller candidates on space {self!r}: {candidates}')
             assert False
 
         if len(candidates) == 1:
@@ -103,7 +107,7 @@ class BoardSpace:
         return ret
 
     def has_tunnel(self, faction_name=None):
-        return self.has_tunnel or \
+        return self._has_tunnel or \
                (faction_name and self.structure and self.structure.structure_typ() is StructureType.MINE
                 and self.structure.faction_name is faction_name)
 
@@ -114,6 +118,7 @@ class BoardSpace:
         return self._resources[resource_typ]
 
     def add_resources(self, resource_typ, amt=1):
+        logging.debug(f'{amt} {resource_typ!r} added to {self!r}')
         self._resources[resource_typ] += amt
 
     def amount_of(self, resource_typ):
@@ -121,6 +126,7 @@ class BoardSpace:
 
     def remove_resources(self, resource_typ, amt=1):
         assert self._resources[resource_typ] >= amt
+        logging.debug(f'{amt} {resource_typ!r} removed from {self!r}')
         self._resources[resource_typ] -= amt
 
     def is_home_base(self):
@@ -137,8 +143,8 @@ class BoardSpace:
             self.mechs.add(piece)
         elif piece.is_worker():
             self.workers.add(piece)
-
-        raise TypeError("add_piece should only be called with a character, worker or mech")
+        else:
+            raise TypeError("add_piece should only be called with a character, worker or mech")
 
     def remove_piece(self, piece):
         if piece.is_character():
@@ -150,8 +156,8 @@ class BoardSpace:
         elif piece.is_worker():
             assert piece in self.workers
             self.workers.remove(piece)
-
-        raise TypeError("add_piece should only be called with a character, worker or mech")
+        else:
+            raise TypeError("remove_piece should only be called with a character, worker or mech")
 
     def all_pieces(self, faction):
         ret = []
@@ -204,7 +210,7 @@ def _home_base(is_active):
     return HomeBase(is_active)
 
 
-THE_FACTORY = _factory((3,3))
+THE_FACTORY = _factory((3, 3))
 
 _board_spaces = [
     [None, _mountain((0, 1)), _farm((0, 2)), _village((0, 3), has_encounter=True), _forest((0, 4)), _tundra((0, 5)),
@@ -219,7 +225,8 @@ _board_spaces = [
      _lake((4, 4)), _village((4, 5), has_tunnel=True), _lake((4, 6))],
     [_mountain((5, 0)), _village((5, 1), has_encounter=True), _village((5, 2), has_encounter=True),
      _tundra((5, 3), has_tunnel=True), _forest((5, 4)), _mountain((5, 5), has_encounter=True), _tundra((5, 6))],
-    [None, _tundra((6, 1)), _lake((6, 2)), _farm((6, 3)), _mountain((6, 4), has_encounter=True), _village((6, 5)), _farm((6, 6))],
+    [None, _tundra((6, 1)), _lake((6, 2)), _farm((6, 3)), _mountain((6, 4), has_encounter=True), _village((6, 5)),
+     _farm((6, 6))],
     [None, None, None, _village((7, 3)), None, None, None]
 ]
 
@@ -281,10 +288,10 @@ class Board:
                         other_space = _board_spaces[other_r][other_c] if on_the_board(other_r, other_c) else None
                         if other_space:
                             adjacent_spaces.append(other_space)
-                        if space.has_tunnel():
-                            for tunnel_space in tunnel_spaces:
-                                if space is not tunnel_space:
-                                    adjacent_spaces.append(tunnel_space)
+                    if space.has_tunnel():
+                        for tunnel_space in tunnel_spaces:
+                            if space is not tunnel_space:
+                                adjacent_spaces.append(tunnel_space)
                     self.base_adjacencies[space] = adjacent_spaces
         for faction_name, home_base in self.home_bases.items():
             adjacent_spaces = map(lambda x: _board_spaces[x[0]][x[1]], _home_base_adjacencies[faction_name])
@@ -318,6 +325,7 @@ class Board:
 
     @staticmethod
     def move_piece(piece, to_space):
+        logging.debug(f'{piece!r} moves from {piece.board_space!r} to {to_space!r}')
         piece.board_space.remove_piece(piece)
         to_space.add_piece(piece)
         piece.board_space = to_space

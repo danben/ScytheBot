@@ -5,27 +5,30 @@ from collections import defaultdict
 class Piece:
     def __init__(self, board_space, typ, faction_name):
         self.board_space = board_space
-        self._typ = typ
+        self.typ = typ
         self.faction_name = faction_name
         self.carrying_resources = defaultdict(int)
 
+    def __repr__(self):
+        return self.typ.__repr__()
+
     def is_plastic(self):
-        return self._typ is PieceType.CHARACTER or self._typ is PieceType.MECH
+        return self.typ == PieceType.CHARACTER or self.typ == PieceType.MECH
 
     def is_mech(self):
-        return self._typ is PieceType.MECH
+        return self.typ == PieceType.MECH
 
     def is_character(self):
-        return self._typ is PieceType.CHARACTER
+        return self.typ == PieceType.CHARACTER
 
     def is_structure(self):
-        return self._typ is PieceType.STRUCTURE
+        return self.typ == PieceType.STRUCTURE
 
     def is_worker(self):
-        return self._typ is PieceType.WORKER
+        return self.typ == PieceType.WORKER
 
     def typ(self):
-        return self._typ
+        return self.typ
 
     def drop_everything(self):
         self.carrying_resources = defaultdict(int)

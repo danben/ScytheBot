@@ -1,42 +1,36 @@
-from game.actions.dsl import DiscreteChoice, StateChange
-from game.actions.base import BottomAction, BottomActionType
-from game.types import Benefit, ResourceType
+from game.actions.action import BottomAction, Choice
+from game.types import Benefit, BottomActionType, ResourceType
+
+
+class ChooseRecruitToEnlist(Choice):
+    def __init__(self):
+        super().__init__('Choose recruit to enlist')
+
+    def choose(self, agent, game_state):
+        return agent.choose_bottom_action(game_state, game_state.current_player.unenlisted_bottom_actions())
+
+    def do(self, game_state, bottom_action_typ):
+        game_state.action_stack.append(ChooseEnlistReward(bottom_action_typ))
 
 
 class Enlist(BottomAction):
+    enlist_benefit = Benefit.COMBAT_CARDS
+    action_benefit = ChooseRecruitToEnlist()
+
     def __init__(self, maxcost, mincost, payoff):
-        enlist_benefit = Benefit.COMBAT_CARDS
-        action_benefit = ChooseRecruitToEnlist()
         super().__init__(BottomActionType.ENLIST, ResourceType.FOOD, maxcost,
-                         mincost, payoff, enlist_benefit, action_benefit)
-
-    def can_legally_receive_action_benefit(self, game_state):
-        return game_state.current_player.can_enlist()
+                         mincost, payoff, Enlist.enlist_benefit, Enlist.action_benefit)
 
 
-class ChooseRecruitToEnlist(DiscreteChoice):
-    def choices(self, game_state):
-        return [ChooseEnlistReward(bottom_action)
-                for bottom_action in game_state.current_player.unenlisted_bottom_actions()]
-
-
-class ChooseEnlistReward(DiscreteChoice):
+class ChooseEnlistReward(Choice):
     def __init__(self, bottom_action):
         super().__init__()
-        self._bottom_action = bottom_action
+        self.bottom_action = bottom_action
 
-    def choices(self, game_state):
-        return [CommitEnlist(self._bottom_action, enlist_reward)
-                for enlist_reward in game_state.current_player.available_enlist_rewards()]
+    def choose(self, agent, game_state):
+        return agent.choose_enlist_reward(game_state)
 
-
-class CommitEnlist(StateChange):
-    def __init__(self, bottom_action, enlist_reward):
-        super().__init__()
-        self._bottom_action = bottom_action
-        self._enlist_reward = enlist_reward
-
-    def apply(self, game_state):
-        self._bottom_action.enlisted = True
-        game_state.give_reward_to_player(game_state.current_player, self._enlist_reward, 2)
-        game_state.current_player.mark_enlist_benefit(self._enlist_reward)
+    def do(self, game_state, enlist_reward):
+        self.bottom_action.enlist()
+        game_state.give_reward_to_player(game_state.current_player, enlist_reward, 2)
+        game_state.current_player.mark_enlist_benefit(enlist_reward)

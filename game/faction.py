@@ -13,8 +13,8 @@ class Faction:
         # If two hexes on the board are physically adjacent but not yet effectively adjacent,
         # this could only be because one is a lake or because they're separated by a river.
         def should_add(space, other_space):
-            return space.terrain_type() is not TerrainType.LAKE \
-                   and other_space.terrain_type() in self.riverwalk_destinations
+            return space.terrain_typ is not TerrainType.LAKE \
+                   and other_space.terrain_typ in self.riverwalk_destinations
         for piece_typ in [PieceType.CHARACTER, PieceType.MECH]:
             Faction.add_adjacencies_from_board_adjacencies(player_adjacencies, board, piece_typ, should_add)
 
@@ -55,14 +55,14 @@ class Nordic(Faction):
     def add_teleport_adjacencies(self, player_adjacencies, board):
         # Can move to/from lakes. Lakes already are considered effectively adjacent to everything around them.
         def should_add(_space, other_space):
-            return other_space.terrain_type is TerrainType.LAKE
+            return other_space.terrain_typ is TerrainType.LAKE
         for piece_typ in [PieceType.CHARACTER, PieceType.MECH]:
             Faction.add_adjacencies_from_board_adjacencies(player_adjacencies, board, piece_typ, should_add)
 
     def add_faction_specific_adjacencies(self, player_adjacencies, board):
         # Workers can swim across rivers.
         def should_add(space, other_space):
-            return space.is_blocked_by_river(other_space) and space.terrain_type is not TerrainType.HOME_BASE
+            return space.is_blocked_by_river(other_space) and space.terrain_typ is not TerrainType.HOME_BASE
         Faction.add_adjacencies_from_board_adjacencies(player_adjacencies, board, PieceType.WORKER, should_add)
 
 
@@ -73,13 +73,13 @@ class Rusviet(Faction):
 
     def extra_adjacent_spaces(self, piece, board):
         ret = []
-        if piece.board_space.terrain_type() is TerrainType.VILLAGE or piece.board_space is board.factory:
+        if piece.board_space.terrain_typ is TerrainType.VILLAGE or piece.board_space is board.factory:
             for other_space in board.base_adjacencies.keys():
-                if other_space is not piece.board_space and other_space.terrain_type() is TerrainType.VILLAGE \
+                if other_space is not piece.board_space and other_space.terrain_typ is TerrainType.VILLAGE \
                         and other_space.controller() is FactionName.RUSVIET:
                     ret.append(other_space)
 
-        if piece.board_space.terrain_type() is TerrainType.VILLAGE:
+        if piece.board_space.terrain_typ is TerrainType.VILLAGE:
             ret.append(board.factory)
         return ret
 
@@ -93,12 +93,12 @@ class Polania(Faction):
         for piece_typ in [PieceType.CHARACTER, PieceType.MECH]:
             # All lakes are adjacent to each other
             def should_add(space, other_space):
-                return space.terrain_type() is TerrainType.LAKE and other_space.terrain_type() is TerrainType.LAKE
+                return space.terrain_typ is TerrainType.LAKE and other_space.terrain_typ is TerrainType.LAKE
             Faction.add_adjacencies_from_anywhere(player_adjacencies, piece_typ, should_add)
 
             # Can now move from regular spaces to lakes
             def should_add(_space, other):
-                return other.terrain_type is TerrainType.LAKE
+                return other.terrain_typ is TerrainType.LAKE
             Faction.add_adjacencies_from_board_adjacencies(player_adjacencies, board, piece_typ, should_add)
 
 
@@ -128,7 +128,7 @@ class Saxony(Faction):
 
     def extra_adjacent_spaces(self, piece, board):
         def is_tunnel_or_my_mountain(space):
-            return (space.terrain_type() is TerrainType.MOUNTAIN and space.controller() is FactionName.SAXONY)\
+            return (space.terrain_typ is TerrainType.MOUNTAIN and space.controller() is FactionName.SAXONY)\
                    or piece.board_space.has_tunnel(FactionName.SAXONY)
         ret = []
         if is_tunnel_or_my_mountain(piece.board_space):

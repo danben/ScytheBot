@@ -1,40 +1,35 @@
-from game.actions.dsl import *
-from game.actions.base import BottomAction, BottomActionType
-from game.types import Benefit, ResourceType
+from game.actions.action import *
+from game.types import Benefit, BottomActionType, ResourceType
+
+
+class ChooseStructureToBuild(Choice):
+    def __init__(self):
+        super().__init__('Choose structure to build')
+
+    def choose(self, agent, game_state):
+        return agent.choose_structure_to_build(game_state)
+
+    def do(self, game_state, top_action):
+        game_state.action_stack.append(ChooseSpaceToBuildOn(top_action))
 
 
 class Build(BottomAction):
+    enlist_benefit = Benefit.POPULARITY
+    action_benefit = ChooseStructureToBuild()
+
     def __init__(self, maxcost, mincost, payoff):
-        enlist_benefit = Benefit.POPULARITY
-        action_benefit = ChooseStructureToBuild()
         super().__init__(BottomActionType.BUILD, ResourceType.WOOD, maxcost,
-                         mincost, payoff, enlist_benefit, action_benefit)
-
-    def can_legally_receive_action_benefit(self, game_state):
-        return game_state.current_player.can_build()
+                         mincost, payoff, Build.enlist_benefit, Build.action_benefit)
 
 
-class ChooseStructureToBuild(DiscreteChoice):
-    def choices(self, game_state):
-        return [ChooseSpaceToBuildOn(top_action)
-                for top_action in game_state.current_player.top_actions_with_unbuilt_structures()]
-
-
-class ChooseSpaceToBuildOn(DiscreteChoice):
+class ChooseSpaceToBuildOn(Choice):
     def __init__(self, top_action):
-        super().__init__()
-        self._top_action = top_action
+        super().__init__('Choose space to build on')
+        self.top_action = top_action
 
-    def choices(self, game_state):
-        return [BuildStructure(self._top_action, space) for space in game_state.current_player.legal_building_spots()]
+    def choose(self, agent, game_state):
+        return agent.choose_board_space(game_state, game_state.current_player.legal_building_spots())
 
-
-class BuildStructure(StateChange):
-    def __init__(self, top_action, space):
-        super().__init__()
-        self._top_action = top_action
-        self._space = space
-
-    def apply(self, game_state):
-        self._top_action.build_structure()
-        game_state.current_player.build_structure(self._space, self._top_action.structure_typ())
+    def do(self, game_state, space):
+        self.top_action.build_structure()
+        game_state.current_player.build_structure(space, self.top_action.structure_typ())

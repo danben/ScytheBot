@@ -1,29 +1,22 @@
-from game.actions.dsl import *
+from game.actions.action import Choice, Optional
 from game.types import FactionName
 
-import logging
 
-
-class TakeTurn(DiscreteChoice):
+class TakeTurn(Choice):
     def __init__(self):
-        super().__init__()
+        super().__init__('Choosing an action spot')
 
-    def choices(self, game_state):
+    def choose(self, agent, game_state):
         player_mat = game_state.current_player.player_mat
         if game_state.current_player.faction_name() is FactionName.RUSVIET:
-            action_combos = [(i, action_combo) for i, action_combo in enumerate(player_mat.action_spaces())]
+            invalid = None
         else:
-            action_combos = [(i, action_combo) for i, action_combo in enumerate(player_mat.action_spaces())
-                             if player_mat.last_action_spot_taken != i]
+            invalid = player_mat.last_action_spot_taken
 
-        return [Sequence.of_list([MovePawn(i), Optional(action_combo[0]), Optional(action_combo[1])])
-                for i, action_combo in action_combos]
+        return agent.choose_action_spot(game_state, invalid)
 
-
-class MovePawn(StateChange):
-    def __init__(self, new_spot):
-        super().__init__()
-        self._new_spot = new_spot
-
-    def apply(self, game_state):
-        game_state.current_player.player_mat.move_pawn_to(self._new_spot)
+    def do(self, game_state, new_spot):
+        action_combo = game_state.current_player.player_mat.action_spaces[new_spot]
+        game_state.current_player.player_mat.move_pawn_to(new_spot)
+        game_state.action_stack.append(action_combo[1])
+        game_state.action_stack.append(action_combo[0])

@@ -1,11 +1,12 @@
 from game import constants
-from game.types import Benefit, FactionName, PieceType, ResourceType, StarType, StructureType, TerrainType
+from game.types import Benefit, BottomActionType, FactionName, PieceType, ResourceType, StarType, StructureType, \
+    TerrainType
 from game.components.board import THE_FACTORY
 from game.components.piece import Character, Mech, Structure, Worker
 from game.components.player_mat import PlayerMat
 from game.exceptions import GameOver
-from collections import defaultdict
 
+from collections import defaultdict
 import logging
 import numpy as np
 
@@ -23,6 +24,7 @@ class Stars:
 
     def achieve(self, typ):
         if self._achieved[typ] < self._limits[typ]:
+            logging.debug(f'Star achieved: {typ!r}')
             self._achieved[typ] += 1
             self.count += 1
             assert self.count < 7
@@ -54,7 +56,7 @@ class Player:
         spaces_adjacent_to_home_base = board.adjacencies_accounting_for_rivers_and_lakes[self.home_base]
         assert len(spaces_adjacent_to_home_base) == 2
         for space in spaces_adjacent_to_home_base:
-            new_worker = Worker(space, self.faction_name)
+            new_worker = Worker(space, self.faction.name)
             self._workers.add(new_worker)
             space.workers.add(new_worker)
         self._deployed_mechs = set()
@@ -62,15 +64,31 @@ class Player:
         self.home_base.characters.add(self._character)
         self._enlist_rewards = {benefit: False for benefit in Benefit}
         self.mech_slots = [False] * constants.NUM_MECHS
-        self._structures = defaultdict(lambda: None)
+        self.structures = {}
         self._adjacencies = {PieceType.CHARACTER: board.adjacencies_accounting_for_rivers_and_lakes.copy(),
                              PieceType.MECH: board.adjacencies_accounting_for_rivers_and_lakes.copy(),
                              PieceType.WORKER: board.adjacencies_accounting_for_rivers_and_lakes.copy()}
 
         self.faction.add_faction_specific_adjacencies(self._adjacencies, board.base_adjacencies)
 
+    def __repr__(self):
+        return f'{self.faction.name!r} / {self.player_mat.name!r}'
+
+    def resources_string(self):
+        return ''.join([f'{r} : {self.available_resources(r)}; ' for r in ResourceType])
+
     def to_string(self):
-        return f'Stars: {self.stars}; Score: {self.score()}'
+        return f'Coins: {self._coins}; Popularity: {self._popularity}; Power: {self._power}\n' \
+               f'Combat cards: {self._combat_cards}\n' \
+               f'Controlled spaces: {self.controlled_spaces()}\n' \
+               f'Controlled resources: {self.resources_string()}\n' \
+               f'Workers: {[w.board_space for w in self._workers]}\n' \
+               f'Mechs: {[m.board_space for m in self._deployed_mechs]}\n' \
+               f'Character at {self._character.board_space} ' \
+               f'Stars: {self.stars}; Score: {self.score()}'
+
+    def log(self, msg):
+        logging.debug(f'{self!r} : {msg}')
 
     def score(self):
         star_score, territory_score, resource_pair_score = 3, 2, 1
@@ -89,11 +107,11 @@ class Player:
         return self.faction.name
 
     def build_structure(self, board_space, structure_typ):
-        assert not self._structures[structure_typ()]
+        assert not self.structures.get(structure_typ, None)
         assert not board_space.has_structure
         structure = Structure(board_space, structure_typ, self.faction_name())
         board_space.set_structure(structure)
-        self._structures[structure_typ()] = structure
+        self.structures[structure_typ] = structure
         if not self.can_build():
             self.stars.achieve(StarType.STRUCTURE)
         if structure_typ() is StructureType.MINE:
@@ -124,6 +142,7 @@ class Player:
         self._coins += coins
 
     def remove_coins(self, coins):
+        logging.debug(f'{self!r} loses {coins} coins')
         self._coins = max(self._coins - coins, 0)
 
     def add_popularity(self, popularity):
@@ -133,6 +152,7 @@ class Player:
             self.stars.achieve(StarType.POPULARITY)
 
     def remove_popularity(self, popularity):
+        logging.debug(f'{self!r} loses {popularity} popularity')
         self._popularity = max(self._popularity - popularity, 0)
 
     def popularity(self):
@@ -151,6 +171,7 @@ class Player:
 
     def discard_combat_card(self, card_value, combat_card_deck):
         assert self._combat_cards[card_value]
+        logging.debug(f'{self!r} discards a combat card with value {card_value}')
         self._combat_cards[card_value] -= 1
         combat_card_deck.discard(card_value)
 
@@ -164,6 +185,7 @@ class Player:
             self.discard_combat_card(lowest, combat_card_deck)
 
     def remove_random_combat_card(self):
+        logging.debug(f'{self!r} loses a random combat card')
         total = self.total_combat_cards()
         if not total:
             return None
@@ -176,16 +198,21 @@ class Player:
     def available_workers(self):
         return constants.NUM_WORKERS - len(self._workers)
 
-    def add_worker(self, board_space):
+    def _add_worker(self, board_space):
         assert len(self._workers) < constants.NUM_WORKERS
-        new_worker = Worker(board_space, self.faction_name)
+        new_worker = Worker(board_space, self.faction_name())
         self._workers.add(new_worker)
         board_space.workers.add(new_worker)
         if len(self._workers) == constants.NUM_WORKERS:
             self.stars.achieve(StarType.WORKER)
 
+    def add_workers(self, board_space, n):
+        logging.debug(f'{self!r} receives {n} workers at {board_space!r}')
+        for _ in range(n):
+            self._add_worker(board_space)
+
     def can_upgrade(self):
-        for action_space in self.player_mat.action_spaces():
+        for action_space in self.player_mat.action_spaces:
             bottom_action = action_space[1]
             if bottom_action.is_upgradeable():
                 return True
@@ -197,8 +224,8 @@ class Player:
 
     def cube_spaces_not_fully_upgraded(self):
         ret = []
-        for action_space in self.player_mat.action_spaces():
-            top_action = action_space[0]
+        for action_space in self.player_mat.action_spaces:
+            top_action = action_space[0].top_action()
             for i in top_action.upgradeable_cubes():
                 ret.append((top_action, i))
 
@@ -217,7 +244,7 @@ class Player:
 
     def spaces_with_structures(self):
         ret = set()
-        for structure in self._structures.values():
+        for structure in self.structures.values():
             if structure:
                 ret.add(structure.board_space)
         return ret
@@ -228,7 +255,7 @@ class Player:
         s.discard(self.home_base)
         to_remove = []
         for space in s:
-            if space.controller is not self:
+            if space.controller() is not self.faction_name():
                 to_remove.append(space)
         for space in to_remove:
             s.remove(space)
@@ -254,6 +281,7 @@ class Player:
         return [space for space in self.spaces_with_workers() if not space.has_structure()]
 
     def end_turn(self):
+        logging.debug(f'{self!r} ends their turn')
         self._character.moved_this_turn = False
         self._character.moved_into_enemy_territory_this_turn = False
         for worker in self._workers:
@@ -269,31 +297,39 @@ class Player:
         return not all(self._enlist_rewards.values())
 
     def mark_enlist_benefit(self, enlist_benefit):
+        logging.debug(f'{self!r} takes enlist benefit {enlist_benefit!r}')
         self._enlist_rewards[enlist_benefit] = True
         if not self.can_enlist():
             self.stars.achieve(StarType.RECRUIT)
 
     def unenlisted_bottom_actions(self):
         ret = []
-        for action_space in self.player_mat.action_spaces():
+        for action_space in self.player_mat.action_spaces:
             bottom_action = action_space[1]
-            if not bottom_action.enlisted:
+            if not bottom_action.has_enlisted():
                 ret.append(bottom_action)
         return ret
 
     def available_enlist_rewards(self):
         return [benefit for (benefit, enlisted) in self._enlist_rewards.items() if not enlisted]
 
+    def has_enlisted(self, bottom_action_typ):
+        for action_space in self.player_mat.action_spaces:
+            bottom_action = action_space[1]
+            if bottom_action.bottom_action_typ is bottom_action_typ:
+                return bottom_action.has_enlisted()
+        assert False
+
     def top_actions_with_unbuilt_structures(self):
         ret = []
-        for action_space in self.player_mat.action_spaces():
+        for action_space in self.player_mat.action_spaces:
             top_action = action_space[0]
             if not top_action.structure_is_built():
                 ret.append(top_action)
         return ret
 
     def can_build(self):
-        return not all(self._structures.values())
+        return not all(self.structures.values())
 
     def can_deploy(self):
         return not all(self.mech_slots)
@@ -308,7 +344,7 @@ class Player:
     def deploy_mech(self, mech, space, board):
         logging.debug(f'{self!r} deploys mech {mech} to {space!r}')
         self.mech_slots[mech] = True
-        new_mech = Mech(space, self)
+        new_mech = Mech(space, self.faction_name())
         self._deployed_mechs.add(new_mech)
         space.mechs.add(new_mech)
         if mech == constants.RIVERWALK_MECH:
@@ -327,11 +363,23 @@ class Player:
     def available_resources(self, resource_typ):
         return sum([space.amount_of(resource_typ) for space in self.controlled_spaces()])
 
+    def remove_all_of_this_resource(self, resource_typ):
+        for space in self.controlled_spaces_with_resource(resource_typ):
+            space.remove_resources(resource_typ, space.amount_of(resource_typ))
+
+    def has_no_resources(self):
+        for r in ResourceType:
+            if self.available_resources(r):
+                return False
+        return True
+
     def resource_pair_count(self):
         num_resources = sum([self.available_resources(r) for r in ResourceType])
         return int(num_resources / 2)
 
     def can_pay_cost(self, cost):
+        if not cost:
+            return True
         total_combat_cards = self.total_combat_cards()
         if not (self._power >= cost.power
                 and self._popularity >= cost.popularity
@@ -348,8 +396,7 @@ class Player:
                        for resource_typ in ResourceType])
 
     def mill_space(self):
-        logging.debug(f'{type(self._structures)}')
-        return self._structures[StructureType.MILL]
+        return self.structures.get(StructureType.MILL, None)
 
     def produceable_spaces(self):
         spaces = self.spaces_with_workers()
@@ -358,11 +405,11 @@ class Player:
             spaces.add(mill_space)
         to_remove = []
         for space in spaces:
-            if space.produced_this_turn:
+            if space.produced_this_turn or space.terrain_typ is TerrainType.VILLAGE and not self.available_workers():
                 to_remove.append(space)
         for space in to_remove:
             spaces.remove(space)
-        return spaces
+        return list(spaces)
 
     def movable_pieces(self):
         s = self._workers | self._deployed_mechs
@@ -381,7 +428,7 @@ class Player:
 
     def effective_adjacent_spaces(self, piece, board):
         assert piece.faction_name is self.faction.name
-        adjacent_spaces = self._adjacencies[piece.typ()][piece.board_space]
+        adjacent_spaces = self._adjacencies[piece.typ][piece.board_space]
         if self.mech_slots[constants.TELEPORT_MECH] and piece.is_plastic():
             extra_adjacent_spaces = self.faction.extra_adjacent_spaces(piece, board)
             adjacent_spaces = adjacent_spaces.copy()
@@ -400,3 +447,21 @@ class Player:
             return adjacent_spaces_without_enemies
         else:
             return adjacent_spaces
+
+    def can_legally_receive_action_benefit(self, bottom_action_typ):
+        if bottom_action_typ is BottomActionType.ENLIST:
+            return self.can_enlist()
+        elif bottom_action_typ is BottomActionType.DEPLOY:
+            return self.can_deploy()
+        elif bottom_action_typ is BottomActionType.BUILD:
+            return self.can_build()
+        elif bottom_action_typ is BottomActionType.UPGRADE:
+            return self.can_upgrade()
+        else:
+            assert False
+
+    def bottom_spaces_not_fully_upgraded(self):
+        return [action_spot[1] for action_spot in self.player_mat.action_spaces if action_spot[1].is_upgradeable()]
+
+    def remove_meeples_from_produce_space(self, amt):
+        self.player_mat.remove_meeples_from_produce_space(amt)

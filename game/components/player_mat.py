@@ -1,14 +1,9 @@
-from game.actions.bolster import Bolster
-from game.actions.build import Build
-from game.actions.deploy import Deploy
-from game.actions.enlist import Enlist
+from game.actions import Bolster, Build, Deploy, Enlist, Produce, Trade, Upgrade
 from game.actions.movegain import MoveGain
-from game.actions.produce import Produce
-from game.actions.trade import Trade
-from game.actions.upgrade import Upgrade
 
 from game.types import PlayerMatName
 
+import logging
 import numpy as np
 
 _starting_popularity = {PlayerMatName.INDUSTRIAL: 2,
@@ -39,10 +34,10 @@ _action_spaces = {PlayerMatName.INDUSTRIAL:
                    (Trade(), Build(maxcost=4, mincost=2, payoff=0)),
                    (Produce(), Enlist(maxcost=3, mincost=2, payoff=2))],
                   PlayerMatName.MECHANICAL:
-                  [(Trade(), Upgrade(maxcost=3, mincost=2, payoff=0),
+                  [(Trade(), Upgrade(maxcost=3, mincost=2, payoff=0)),
                    (Bolster(), Deploy(maxcost=3, mincost=1, payoff=2)),
                    (MoveGain(), Build(maxcost=3, mincost=2, payoff=2)),
-                   (Produce(), Enlist(maxcost=4, mincost=2, payoff=2)))],
+                   (Produce(), Enlist(maxcost=4, mincost=2, payoff=2))],
                   PlayerMatName.AGRICULTURAL:
                   [(MoveGain(), Upgrade(maxcost=2, mincost=2, payoff=1)),
                    (Trade(), Deploy(maxcost=4, mincost=2, payoff=0)),
@@ -54,15 +49,12 @@ class PlayerMat:
     def __init__(self, name):
         self._starting_popularity = _starting_popularity[name]
         self._starting_money = _starting_money[name]
-        self._action_spaces = _action_spaces[name]
+        self.action_spaces = _action_spaces[name]
         self.last_action_spot_taken = None
-        self._name = name
+        self.name = name
 
     def name(self):
-        return self._name
-
-    def action_spaces(self):
-        return self._action_spaces
+        return self.name
 
     def starting_popularity(self):
         return self._starting_popularity
@@ -72,7 +64,17 @@ class PlayerMat:
 
     def move_pawn_to(self, i):
         self.last_action_spot_taken = i
+        logging.debug(f'Space chosen: {self.action_spaces[i]!r}')
 
     @staticmethod
     def choose(num):
         return np.random.choice([pmn for pmn in PlayerMatName], num, replace=False)
+
+    def remove_meeples_from_produce_space(self, amt):
+        for space in self.action_spaces:
+            top = space[0]
+            if isinstance(top, Produce):
+
+                top.meeples_produced += amt
+                return
+        assert False
