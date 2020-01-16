@@ -39,6 +39,9 @@ class BoardSpace:
         else:
             return f'{self.terrain_typ!r}'
 
+    def to_string(self):
+        return f'{self!r}, controlled by {self.controller()!r}\nResources: {self._resources}\nPieces: {self.all_pieces()}\n'
+
     def combat_factions(self):
         factions = set()
         for character in self.characters:
@@ -108,7 +111,7 @@ class BoardSpace:
 
     def has_tunnel(self, faction_name=None):
         return self._has_tunnel or \
-               (faction_name and self.structure and self.structure.structure_typ() is StructureType.MINE
+               (faction_name and self.structure and self.structure.structure_typ is StructureType.MINE
                 and self.structure.faction_name is faction_name)
 
     def has_structure(self):
@@ -154,22 +157,26 @@ class BoardSpace:
             assert piece in self.mechs
             self.mechs.remove(piece)
         elif piece.is_worker():
-            assert piece in self.workers
+            # assert piece in self.workers
+            if piece not in self.workers:
+                logging.debug(f'{self.workers!r}')
+                assert False
             self.workers.remove(piece)
         else:
             raise TypeError("remove_piece should only be called with a character, worker or mech")
 
-    def all_pieces(self, faction):
+    def all_pieces(self, faction=None):
         ret = []
         for character in self.characters:
-            if character.faction_name is faction:
+            if not faction or character.faction_name is faction:
                 ret.append(character)
         for mech in self.mechs:
-            if mech.faction_name is faction:
+            if not faction or mech.faction_name is faction:
                 ret.append(mech)
         for worker in self.workers:
-            if worker.faction_name is faction:
+            if not faction or worker.faction_name is faction:
                 ret.append(worker)
+        return ret
 
 
 def _mountain(coords, has_encounter=False, has_tunnel=False):
@@ -271,7 +278,6 @@ _home_base_adjacencies = {FactionName.SAXONY: [(5, 0), (6, 1)],
 
 class Board:
     def __init__(self, active_factions):
-        self.all_spaces_except_home_bases = _board_spaces
         self.factory = THE_FACTORY
         self.home_bases = {FactionName.SAXONY: _home_base(FactionName.SAXONY in active_factions),
                            FactionName.RUSVIET: _home_base(FactionName.RUSVIET in active_factions),
@@ -304,21 +310,37 @@ class Board:
 
         self._blocked_by_rivers = set(map(to_space_pair, list(ALL_RIVERS)))
 
-        def is_blocked_by_river(from_space, to_space):
-            return (from_space, to_space) in self._blocked_by_rivers \
-                   or (to_space, from_space) in self._blocked_by_rivers \
-                   or (from_space is self.home_bases[FactionName.RUSVIET]
-                       and to_space.terrain_typ is TerrainType.FARM)
-
         self.adjacencies_accounting_for_rivers_and_lakes = {}
         for space, all_adjacent_spaces in self.base_adjacencies.items():
             adjacent_spaces = [other_space for other_space in all_adjacent_spaces
-                               if not (is_blocked_by_river(space, other_space)
+                               if not (self.is_blocked_by_river(space, other_space)
                                        or other_space.terrain_typ is TerrainType.LAKE)]
             self.adjacencies_accounting_for_rivers_and_lakes[space] = adjacent_spaces
 
         for home_base in self.home_bases.values():
             assert len(self.adjacencies_accounting_for_rivers_and_lakes[home_base]) == 2
+
+        for lake_space in lake_spaces:
+            assert lake_space in self.base_adjacencies
+
+    def __repr__(self):
+        s = []
+        for space in self.base_adjacencies.keys():
+            if space.all_pieces():
+                s.append(space.to_string())
+        return '; '.join(s)
+
+    def invariant(self):
+        for space in self.base_adjacencies.keys():
+            for piece in space.all_pieces():
+                if piece.board_space is not space:
+                    raise Exception(f'{piece} on {space}')
+
+    def is_blocked_by_river(self, from_space, to_space):
+        return (from_space, to_space) in self._blocked_by_rivers \
+               or (to_space, from_space) in self._blocked_by_rivers \
+               or (from_space is self.home_bases[FactionName.RUSVIET]
+                   and to_space.terrain_typ is TerrainType.FARM)
 
     def home_base(self, faction_name):
         return self.home_bases[faction_name]

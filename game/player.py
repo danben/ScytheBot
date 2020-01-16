@@ -41,6 +41,11 @@ def combat_cards_dict(combat_cards):
         ret[card] += 1
     return ret
 
+def copy_board_adjacencies(board_adjacencies):
+    new_dict = {}
+    for s, adj in board_adjacencies.items():
+        new_dict[s] = adj[:]
+    return new_dict
 
 class Player:
     def __init__(self, faction, player_mat_name, board, draw_combat_cards):
@@ -65,14 +70,20 @@ class Player:
         self._enlist_rewards = {benefit: False for benefit in Benefit}
         self.mech_slots = [False] * constants.NUM_MECHS
         self.structures = {}
-        self._adjacencies = {PieceType.CHARACTER: board.adjacencies_accounting_for_rivers_and_lakes.copy(),
-                             PieceType.MECH: board.adjacencies_accounting_for_rivers_and_lakes.copy(),
-                             PieceType.WORKER: board.adjacencies_accounting_for_rivers_and_lakes.copy()}
+        self._adjacencies = {PieceType.CHARACTER: copy_board_adjacencies(board.adjacencies_accounting_for_rivers_and_lakes),
+                             PieceType.MECH: copy_board_adjacencies(board.adjacencies_accounting_for_rivers_and_lakes),
+                             PieceType.WORKER: copy_board_adjacencies(board.adjacencies_accounting_for_rivers_and_lakes)}
 
         self.faction.add_faction_specific_adjacencies(self._adjacencies, board.base_adjacencies)
 
     def __repr__(self):
         return f'{self.faction.name!r} / {self.player_mat.name!r}'
+
+    def invariant(self):
+        for adj in self._adjacencies[PieceType.WORKER].values():
+            for s in adj:
+                s.terrain_typ is not TerrainType.HOME_BASE
+
 
     def resources_string(self):
         return ''.join([f'{r} : {self.available_resources(r)}; ' for r in ResourceType])
@@ -108,13 +119,13 @@ class Player:
 
     def build_structure(self, board_space, structure_typ):
         assert not self.structures.get(structure_typ, None)
-        assert not board_space.has_structure
+        assert not board_space.has_structure()
         structure = Structure(board_space, structure_typ, self.faction_name())
         board_space.set_structure(structure)
         self.structures[structure_typ] = structure
         if not self.can_build():
             self.stars.achieve(StarType.STRUCTURE)
-        if structure_typ() is StructureType.MINE:
+        if structure_typ is StructureType.MINE:
             for piece_typ in [PieceType.CHARACTER, PieceType.MECH, PieceType.WORKER]:
                 adjacencies = self._adjacencies[piece_typ]
                 for space, adjacent in adjacencies.items():
@@ -184,14 +195,22 @@ class Player:
                 assert False
             self.discard_combat_card(lowest, combat_card_deck)
 
-    def remove_random_combat_card(self):
-        logging.debug(f'{self!r} loses a random combat card')
+    def random_combat_card(self, optional=False):
         total = self.total_combat_cards()
         if not total:
             return None
-        all_combat_card_values = range(constants.MIN_COMBAT_CARD, constants.MAX_COMBAT_CARD + 1)
+        if optional:
+            total += 1
+        all_combat_card_values = list(range(constants.MIN_COMBAT_CARD, constants.MAX_COMBAT_CARD + 1))
         proportions = [self._combat_cards[card] / total for card in all_combat_card_values]
-        card = np.random.choice(all_combat_card_values, p=proportions)
+        if optional:
+            all_combat_card_values.append(0)
+            proportions.append(1/total)
+        return np.random.choice(all_combat_card_values, p=proportions)
+
+    def remove_random_combat_card(self):
+        logging.debug(f'{self!r} loses a random combat card')
+        card = self.random_combat_card()
         self._combat_cards[card] -= 1
         return card
 
@@ -235,6 +254,7 @@ class Player:
         ret = set([worker.board_space for worker in self._workers
                    if worker.board_space.terrain_typ is not TerrainType.LAKE])
         ret.discard(self.home_base)
+
         return ret
 
     def spaces_with_mechs(self):
@@ -323,13 +343,16 @@ class Player:
     def top_actions_with_unbuilt_structures(self):
         ret = []
         for action_space in self.player_mat.action_spaces:
-            top_action = action_space[0]
-            if not top_action.structure_is_built():
+            top_action = action_space[0].top_action()
+            if not top_action.structure_is_built:
                 ret.append(top_action)
         return ret
 
     def can_build(self):
-        return not all(self.structures.values())
+        for t in StructureType:
+            if not self.structures.get(t, None):
+                return True
+        return False
 
     def can_deploy(self):
         return not all(self.mech_slots)
@@ -396,7 +419,10 @@ class Player:
                        for resource_typ in ResourceType])
 
     def mill_space(self):
-        return self.structures.get(StructureType.MILL, None)
+        mill = self.structures.get(StructureType.MILL, None)
+        if mill:
+            return mill.board_space
+        return None
 
     def produceable_spaces(self):
         spaces = self.spaces_with_workers()
@@ -429,8 +455,10 @@ class Player:
     def effective_adjacent_spaces(self, piece, board):
         assert piece.faction_name is self.faction.name
         adjacent_spaces = self._adjacencies[piece.typ][piece.board_space]
+        assert piece.board_space not in adjacent_spaces
         if self.mech_slots[constants.TELEPORT_MECH] and piece.is_plastic():
             extra_adjacent_spaces = self.faction.extra_adjacent_spaces(piece, board)
+            assert piece.board_space not in extra_adjacent_spaces
             adjacent_spaces = adjacent_spaces.copy()
             for space in extra_adjacent_spaces:
                 if space not in adjacent_spaces:

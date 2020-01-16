@@ -10,7 +10,7 @@ class Piece:
         self.carrying_resources = defaultdict(int)
 
     def __repr__(self):
-        return self.typ.__repr__()
+        return f'{self.typ.__repr__()} {self.board_space!r}'
 
     def is_plastic(self):
         return self.typ == PieceType.CHARACTER or self.typ == PieceType.MECH
@@ -49,10 +49,7 @@ class Structure(Piece):
     def __init__(self, board_space, structure_typ, faction_name):
         assert not board_space.has_structure()
         super().__init__(board_space, PieceType.STRUCTURE, faction_name)
-        self._structure_typ = structure_typ
-
-    def structure_typ(self):
-        return self._structure_typ
+        self.structure_typ = structure_typ
 
 
 class Mech(MovablePiece):
@@ -75,4 +72,6 @@ class Character(MovablePiece):
 
 class Worker(MovablePiece):
     def __init__(self, board_space, faction_name):
+        if isinstance(board_space, Structure):
+            assert False
         super().__init__(board_space, PieceType.WORKER, faction_name)

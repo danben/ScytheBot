@@ -32,4 +32,4 @@ class ChooseSpaceToBuildOn(Choice):
 
     def do(self, game_state, space):
         self.top_action.build_structure()
-        game_state.current_player.build_structure(space, self.top_action.structure_typ())
+        game_state.current_player.build_structure(space, self.top_action.structure_typ)

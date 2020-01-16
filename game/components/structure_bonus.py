@@ -4,13 +4,16 @@ from game.types import TerrainType
 from collections import defaultdict
 from enum import Enum
 
-import random as rnd
+import logging
 
 
 def score_adjacent(board, spaces, num_spaces_to_coins):
     scores = defaultdict(int)
     for space in spaces:
         marked = defaultdict(bool)
+        logging.debug(f'{board.base_adjacencies.keys()}')
+        logging.debug(f'{space!r}')
+        logging.debug(f'{space in board.base_adjacencies}')
         for other_space in board.base_adjacencies[space]:
             if other_space.structure and not marked[other_space.structure.faction_name]:
                 scores[other_space.structure.faction_name] += 1
@@ -146,7 +149,8 @@ class StructureBonus(Enum):
 
     @staticmethod
     def random():
-        return StructureBonus(rnd.randint(1, 6))
+        return StructureBonus.NEXT_TO_LAKES
+        # return StructureBonus(rnd.randint(1, 6))
 
 
 score_functions = {StructureBonus.NEXT_TO_TUNNELS: score_next_to_tunnels,

@@ -52,3 +52,7 @@ class Agent(ABC):
     @abstractmethod
     def choose_cube_space_to_upgrade(self, game_state):
         pass
+
+    @abstractmethod
+    def choose_optional_combat_card(self, game_state):
+        pass

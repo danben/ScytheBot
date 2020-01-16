@@ -153,9 +153,6 @@ class TopAction:
         self.structure_typ = structure_typ
         self.cubes_upgraded = [False] * num_cubes
 
-    def structure_typ(self):
-        return self.structure_typ
-
     def structure_is_built(self):
         return self.structure_is_built
 
@@ -276,7 +273,7 @@ class BottomActionIfPaid(StateChange):
             if current_player.can_legally_receive_action_benefit(self.bottom_action_typ):
                 game_state.action_stack.append(Optional(self.action_benefit))
             else:
-                logging.debug('Cannot perform action {self._action_benefit.name} so skipping')
+                logging.debug(f'Cannot receive benefit from action {self.bottom_action_typ} so skipping')
 
 
 class GiveEnlistBenefitsToNeighbors(StateChange):

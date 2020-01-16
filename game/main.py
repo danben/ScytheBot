@@ -7,7 +7,7 @@ import game.components.structure_bonus as structure_bonus
 from copy import deepcopy
 import logging
 
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.ERROR)
 
 ''' TODO list
  - add reprs for types
@@ -56,10 +56,13 @@ def play(game_state):
             logging.debug(f'Next player: {game_state.current_player.faction_name()} / '
                           f'{game_state.current_player.player_mat.name}')
             logging.debug(f'{game_state.current_player.to_string()}')
+            logging.debug(f'Board: {game_state.board!r}')
+            game_state.board.invariant()
             game_state.action_stack.append(take_turn)
             while game_state.action_stack:
                 game_state = advance(game_state)
             game_state.current_player.end_turn()
+            game_state.current_player.invariant()
 
             # TODO: Why is this not a property of the board?
             for space in game_state.spaces_produced_this_turn:
@@ -69,8 +72,8 @@ def play(game_state):
             if game_state.current_player_idx == len(game_state.players):
                 game_state.current_player_idx = 0
             num_turns += 1
-            if num_turns == 500:
-                logging.debug("500 turns without a winner")
+            if num_turns == 1000:
+                logging.debug("1000 turns without a winner")
                 raise GameOver()
     except GameOver:
         player_scores = {faction_name: player.score() for faction_name, player in game_state.players_by_faction.items()}

@@ -127,6 +127,26 @@ class StarType(Enum):
     POPULARITY = 8
     POWER = 9
 
+    def __repr__(self):
+        if self is StarType.UPGRADE:
+            return "upgrade"
+        elif self is StarType.MECH:
+            return "mech"
+        elif self is StarType.STRUCTURE:
+            return "structure"
+        elif self is StarType.RECRUIT:
+            return "recruit"
+        elif self is StarType.WORKER:
+            return "worker"
+        elif self is StarType.SECRET_OBJECTIVE:
+            return "secret objective"
+        elif self is StarType.COMBAT:
+            return "combat"
+        elif self is StarType.POPULARITY:
+            return "popularity"
+        elif self is StarType.POWER:
+            return "power"
+
 
 class TerrainType(Enum):
     MOUNTAIN = 1

@@ -88,7 +88,9 @@ class ChooseNumWorkers(Choice):
         self.max_workers = max_workers
 
     def choose(self, agent, game_state):
-        return agent.choose_numeric(game_state, low=1, high=self.max_workers)
+        high = self.max_workers
+        low = min(1, high)
+        return agent.choose_numeric(game_state, low, high)
 
     def do(self, game_state, amt):
         game_state.action_stack.append(ReceiveWorkers(amt, self.space))

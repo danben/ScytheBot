@@ -53,3 +53,5 @@ class RandomAgent(Agent):
         cube_spaces = game_state.current_player.cube_spaces_not_fully_upgraded()
         return cube_spaces[np.random.choice(len(cube_spaces))]
 
+    def choose_optional_combat_card(self, game_state):
+        return game_state.current_player.random_combat_card(optional=True)

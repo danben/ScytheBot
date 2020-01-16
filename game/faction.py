@@ -133,7 +133,7 @@ class Saxony(Faction):
         ret = []
         if is_tunnel_or_my_mountain(piece.board_space):
             for space in board.base_adjacencies.keys():
-                if is_tunnel_or_my_mountain(space):
+                if space is not piece.board_space and is_tunnel_or_my_mountain(space):
                     ret.append(space)
         return ret
 
