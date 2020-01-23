@@ -5,6 +5,7 @@ from game.game_state import GameState
 import game.components.structure_bonus as structure_bonus
 
 from copy import deepcopy
+import cProfile
 import logging
 
 logging.basicConfig(level=logging.ERROR)
@@ -72,8 +73,8 @@ def play(game_state):
             if game_state.current_player_idx == len(game_state.players):
                 game_state.current_player_idx = 0
             num_turns += 1
-            if num_turns == 1000:
-                logging.debug("1000 turns without a winner")
+            if num_turns == 50:
+                logging.debug("50 turns without a winner")
                 raise GameOver()
     except GameOver:
         player_scores = {faction_name: player.score() for faction_name, player in game_state.players_by_faction.items()}
@@ -89,4 +90,4 @@ if __name__ == '__main__':
     num_players = 2
     agents = [RandomAgent() for _ in range(num_players)]
     game_state = GameState(agents)
-    play(game_state)
+    cProfile.run('play(game_state)', sort='tottime')

@@ -4,16 +4,13 @@ from game.types import TerrainType
 from collections import defaultdict
 from enum import Enum
 
-import logging
+import random
 
 
 def score_adjacent(board, spaces, num_spaces_to_coins):
     scores = defaultdict(int)
     for space in spaces:
         marked = defaultdict(bool)
-        logging.debug(f'{board.base_adjacencies.keys()}')
-        logging.debug(f'{space!r}')
-        logging.debug(f'{space in board.base_adjacencies}')
         for other_space in board.base_adjacencies[space]:
             if other_space.structure and not marked[other_space.structure.faction_name]:
                 scores[other_space.structure.faction_name] += 1
@@ -44,7 +41,8 @@ def score_next_to_tunnels(board):
         else:
             return 0
 
-    return score_adjacent(board, bd.tunnel_spaces, num_spaces_to_coins)
+    tunnel_spaces = [space for space in board.base_adjacencies.keys() if space.has_tunnel()]
+    return score_adjacent(board, tunnel_spaces, num_spaces_to_coins)
 
 
 def score_next_to_lakes(board):
@@ -60,7 +58,8 @@ def score_next_to_lakes(board):
         else:
             return 0
 
-    return score_adjacent(board, bd.lake_spaces, num_spaces_to_coins)
+    lake_spaces = [space for space in board.base_adjacencies.keys() if space.terrain_typ is TerrainType.LAKE]
+    return score_adjacent(board, lake_spaces, num_spaces_to_coins)
 
 
 def score_next_to_encounters(board):
@@ -76,10 +75,11 @@ def score_next_to_encounters(board):
         else:
             return 0
 
-    return score_adjacent(board, bd.encounter_spaces, num_spaces_to_coins)
+    encounter_spaces = [space for space in board.base_adjacencies.keys() if space.has_encounter]
+    return score_adjacent(board, encounter_spaces, num_spaces_to_coins)
 
 
-def score_on_tunnels(_board):
+def score_on_tunnels(board):
     def num_spaces_to_coins(num_spaces):
         if num_spaces >= 3:
             return 6
@@ -90,7 +90,8 @@ def score_on_tunnels(_board):
         else:
             return 0
 
-    return score_on_top_of(bd.tunnel_spaces, num_spaces_to_coins)
+    tunnel_spaces = [space for space in board.base_adjacencies.keys() if space.has_tunnel()]
+    return score_on_top_of(tunnel_spaces, num_spaces_to_coins)
 
 
 def score_longest_row_of_structures(board):
@@ -104,9 +105,8 @@ def score_longest_row_of_structures(board):
             space = board.all_spaces_except_home_bases[next_r][next_c] if bd.on_the_board(next_r, next_c) else None
         return count
 
-    for r, row in enumerate(board.all_spaces_except_home_bases):
-        for c, space in enumerate(row):
-            if space and space.structure:
+        for space in board.base_adjacencies.keys():
+            if space and space.structure and space.terrain_typ is not TerrainType.HOME_BASE:
                 faction = space.structure.faction_name
                 count_down_right = count_in_a_line(space, faction, bd.move_down_and_right)
                 count_up_right = count_in_a_line(space, faction, bd.move_up_and_right)
@@ -149,8 +149,7 @@ class StructureBonus(Enum):
 
     @staticmethod
     def random():
-        return StructureBonus.NEXT_TO_LAKES
-        # return StructureBonus(rnd.randint(1, 6))
+        return StructureBonus(random.randint(1, 6))
 
 
 score_functions = {StructureBonus.NEXT_TO_TUNNELS: score_next_to_tunnels,

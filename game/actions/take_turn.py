@@ -1,4 +1,4 @@
-from game.actions.action import Choice, Optional
+from game.actions.action import Choice
 from game.types import FactionName
 
 

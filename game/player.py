@@ -41,11 +41,13 @@ def combat_cards_dict(combat_cards):
         ret[card] += 1
     return ret
 
+
 def copy_board_adjacencies(board_adjacencies):
     new_dict = {}
     for s, adj in board_adjacencies.items():
         new_dict[s] = adj[:]
     return new_dict
+
 
 class Player:
     def __init__(self, faction, player_mat_name, board, draw_combat_cards):
@@ -70,9 +72,11 @@ class Player:
         self._enlist_rewards = {benefit: False for benefit in Benefit}
         self.mech_slots = [False] * constants.NUM_MECHS
         self.structures = {}
-        self._adjacencies = {PieceType.CHARACTER: copy_board_adjacencies(board.adjacencies_accounting_for_rivers_and_lakes),
+        self._adjacencies = {PieceType.CHARACTER:
+                             copy_board_adjacencies(board.adjacencies_accounting_for_rivers_and_lakes),
                              PieceType.MECH: copy_board_adjacencies(board.adjacencies_accounting_for_rivers_and_lakes),
-                             PieceType.WORKER: copy_board_adjacencies(board.adjacencies_accounting_for_rivers_and_lakes)}
+                             PieceType.WORKER:
+                                 copy_board_adjacencies(board.adjacencies_accounting_for_rivers_and_lakes)}
 
         self.faction.add_faction_specific_adjacencies(self._adjacencies, board.base_adjacencies)
 
@@ -82,8 +86,7 @@ class Player:
     def invariant(self):
         for adj in self._adjacencies[PieceType.WORKER].values():
             for s in adj:
-                s.terrain_typ is not TerrainType.HOME_BASE
-
+                assert s.terrain_typ is not TerrainType.HOME_BASE
 
     def resources_string(self):
         return ''.join([f'{r} : {self.available_resources(r)}; ' for r in ResourceType])

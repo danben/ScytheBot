@@ -21,12 +21,12 @@ ALL_RIVERS = {((0, 3), (1, 3)), ((0, 3), (0, 4)), ((0, 4), (1, 3)), ((0, 5), (0,
 
 class BoardSpace:
     def __init__(self, coords, terrain_typ, has_encounter=False, has_tunnel=False):
-        self._coords = coords
+        self.coords = coords
         self.terrain_typ = terrain_typ
         self.characters = set()
         self.mechs = set()
         self.workers = set()
-        self._resources = defaultdict(int)
+        self.resources = defaultdict(int)
         self.has_encounter = has_encounter
         self.encounter_used = False
         self._has_tunnel = has_tunnel
@@ -34,13 +34,14 @@ class BoardSpace:
         self.produced_this_turn = False
 
     def __repr__(self):
-        if self._coords:
-            return f'{self.terrain_typ!r} : {self._coords}'
+        if self.coords:
+            return f'{self.terrain_typ!r} : {self.coords}'
         else:
             return f'{self.terrain_typ!r}'
 
     def to_string(self):
-        return f'{self!r}, controlled by {self.controller()!r}\nResources: {self._resources}\nPieces: {self.all_pieces()}\n'
+        return f'{self!r}, controlled by {self.controller()!r}\nResources: {self.resources}' \
+               f'\nPieces: {self.all_pieces()}\n'
 
     def combat_factions(self):
         factions = set()
@@ -118,19 +119,19 @@ class BoardSpace:
         return self.structure is not None
 
     def has_resource(self, resource_typ):
-        return self._resources[resource_typ]
+        return self.resources[resource_typ]
 
     def add_resources(self, resource_typ, amt=1):
         logging.debug(f'{amt} {resource_typ!r} added to {self!r}')
-        self._resources[resource_typ] += amt
+        self.resources[resource_typ] += amt
 
     def amount_of(self, resource_typ):
-        return self._resources[resource_typ]
+        return self.resources[resource_typ]
 
     def remove_resources(self, resource_typ, amt=1):
-        assert self._resources[resource_typ] >= amt
+        assert self.resources[resource_typ] >= amt
         logging.debug(f'{amt} {resource_typ!r} removed from {self!r}')
-        self._resources[resource_typ] -= amt
+        self.resources[resource_typ] -= amt
 
     def is_home_base(self):
         return self.terrain_typ is TerrainType.HOME_BASE
@@ -234,14 +235,7 @@ _board_spaces = [
      _tundra((5, 3), has_tunnel=True), _forest((5, 4)), _mountain((5, 5), has_encounter=True), _tundra((5, 6))],
     [None, _tundra((6, 1)), _lake((6, 2)), _farm((6, 3)), _mountain((6, 4), has_encounter=True), _village((6, 5)),
      _farm((6, 6))],
-    [None, None, None, _village((7, 3)), None, None, None]
-]
-
-tunnel_spaces = [space for r in _board_spaces for space in r if space and space.has_tunnel()]
-
-lake_spaces = [space for r in _board_spaces for space in r if space and space.terrain_typ is TerrainType.LAKE]
-
-encounter_spaces = [space for r in _board_spaces for space in r if space and space.has_encounter]
+    [None, None, None, _village((7, 3)), None, None, None]]
 
 
 def on_the_board(row, col):
@@ -286,6 +280,7 @@ class Board:
                            FactionName.CRIMEA: _home_base(FactionName.CRIMEA in active_factions)}
         self.inactive_home_bases = [home_base for home_base in self.home_bases.values() if not home_base.is_active]
         self.base_adjacencies = {}
+        tunnel_spaces = [space for r in _board_spaces for space in r if space and space.has_tunnel()]
         for r, row in enumerate(_board_spaces):
             for c, space in enumerate(row):
                 if space:
@@ -320,6 +315,7 @@ class Board:
         for home_base in self.home_bases.values():
             assert len(self.adjacencies_accounting_for_rivers_and_lakes[home_base]) == 2
 
+        lake_spaces = [space for r in _board_spaces for space in r if space and space.terrain_typ is TerrainType.LAKE]
         for lake_space in lake_spaces:
             assert lake_space in self.base_adjacencies
 

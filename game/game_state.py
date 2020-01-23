@@ -4,6 +4,7 @@ from game.components import Board, CombatCards, PlayerMat, StructureBonus
 from game.player import Player
 from game.types import Benefit, ResourceType
 
+import attr
 import logging
 
 

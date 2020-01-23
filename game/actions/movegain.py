@@ -46,7 +46,7 @@ class MoveOnePiece(Choice):
         # check to see that we're not starting in enemy territory. There would be no legal way for a mech
         # or character to start in enemy territory anyway.
         movable_pieces = [piece for piece in game_state.current_player.movable_pieces()
-                                   if piece.board_space.controller() is game_state.current_player.faction_name()]
+                          if piece.board_space.controller() is game_state.current_player.faction_name()]
         logging.debug(f'Choosing a piece from {movable_pieces}')
         return agent.choose_piece(game_state, movable_pieces)
 
@@ -118,7 +118,8 @@ class LoadWorkers(Choice):
         self.mech = mech
 
     def choose(self, agent, game_state):
-        logging.debug(f'Can choose up to {len(self.mech.board_space.workers)} workers from space {self.mech.board_space!r}')
+        logging.debug(f'Can choose up to {len(self.mech.board_space.workers)} workers'
+                      f' from space {self.mech.board_space!r}')
         return agent.choose_numeric(game_state, 0, len(self.mech.board_space.workers))
 
     def do(self, game_state, amt):
@@ -165,7 +166,8 @@ class MovePieceToSpaceAndDropCarryables(StateChange):
         current_player_faction = game_state.current_player.faction_name()
         if controller_of_new_space and controller_of_new_space is not current_player_faction:
             self.piece.moved_into_enemy_territory_this_turn = True
-            logging.debug(f'{current_player_faction!r} moved a piece into enemy territory controlled by {controller_of_new_space!r}')
+            logging.debug(f'{current_player_faction!r} moved a piece into enemy territory'
+                          f' controlled by {controller_of_new_space!r}')
             if self.piece.is_plastic() and self.board_space.contains_no_enemy_plastic(current_player_faction):
                 to_scare = set()
                 for worker in self.board_space.workers:
