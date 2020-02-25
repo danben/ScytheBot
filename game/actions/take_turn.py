@@ -17,6 +17,6 @@ class TakeTurn(Choice):
 
     def do(self, game_state, new_spot):
         action_combo = game_state.current_player.player_mat.action_spaces[new_spot]
-        game_state.current_player.player_mat.move_pawn_to(new_spot)
-        game_state.action_stack.append(action_combo[1])
-        game_state.action_stack.append(action_combo[0])
+        game_state = game_state.set_player(game_state.current_player.player_mat.move_pawn_to(new_spot))
+        game_state = game_state.push_action(action_combo[1])
+        return game_state.push_action(action_combo[0])

@@ -1,77 +1,105 @@
 from game.types import PieceType, ResourceType
-from collections import defaultdict
+
+import attr
+from pyrsistent import pmap, pset
+
+_no_resources = pmap({r: 0 for r in ResourceType})
 
 
-class Piece:
-    def __init__(self, board_space, typ, faction_name):
-        self.board_space = board_space
-        self.typ = typ
-        self.faction_name = faction_name
-        self.carrying_resources = defaultdict(int)
+@attr.s(frozen=True, slots=True)
+class PieceKey:
+    piece_typ = attr.ib()
+    faction_name = attr.ib()
+    id = attr.ib()
 
-    def __repr__(self):
-        return f'{self.typ.__repr__()} {self.board_space!r}'
+
+@attr.s(frozen=True, slots=True)
+class _Piece:
+    board_coords = attr.ib()
+    typ = attr.ib()
+    faction_name = attr.ib()
+    id = attr.ib()
+
+    def __str__(self):
+        return f'{self.typ} {self.board_coords}'
+
+    def key(self):
+        return PieceKey(self.typ, self.faction_name, self.id)
 
     def is_plastic(self):
-        return self.typ == PieceType.CHARACTER or self.typ == PieceType.MECH
+        return self.typ is PieceType.CHARACTER or self.typ is PieceType.MECH
 
     def is_mech(self):
-        return self.typ == PieceType.MECH
+        return self.typ is PieceType.MECH
 
     def is_character(self):
-        return self.typ == PieceType.CHARACTER
+        return self.typ is PieceType.CHARACTER
 
     def is_structure(self):
-        return self.typ == PieceType.STRUCTURE
+        return self.typ is PieceType.STRUCTURE
 
     def is_worker(self):
-        return self.typ == PieceType.WORKER
+        return self.typ is PieceType.WORKER
 
-    def typ(self):
-        return self.typ
+
+@attr.s(frozen=True, slots=True)
+class _MovablePiece(_Piece):
+    moved_this_turn = attr.ib(default=False)
+    moved_into_enemy_territory_this_turn = attr.ib(default=False)
+    carrying_resources = attr.ib(default=_no_resources)
 
     def drop_everything(self):
-        self.carrying_resources = defaultdict(int)
+        return attr.evolve(self, carrying_resources=_no_resources)
 
     def not_carrying_anything(self):
         d = self.carrying_resources
         return not (d[ResourceType.WOOD] or d[ResourceType.OIL] or d[ResourceType.FOOD] or d[ResourceType.METAL])
 
 
-class MovablePiece(Piece):
-    def __init__(self, board_space, typ, faction_name):
-        super().__init__(board_space, typ, faction_name)
-        self.moved_this_turn = False
-        self.moved_into_enemy_territory_this_turn = False
+@attr.s(frozen=True, slots=True)
+class Structure(_Piece):
+    structure_typ = attr.ib()
+    typ = attr.ib(default=PieceType.STRUCTURE)
+
+    @classmethod
+    def of_typ(cls, board_coords, faction_name, structure_typ):
+        return cls(board_coords, faction_name, structure_typ.value, structure_typ)
 
 
-class Structure(Piece):
-    def __init__(self, board_space, structure_typ, faction_name):
-        assert not board_space.has_structure()
-        super().__init__(board_space, PieceType.STRUCTURE, faction_name)
-        self.structure_typ = structure_typ
-
-
-class Mech(MovablePiece):
-    def __init__(self, board_space, faction_name):
-        super().__init__(board_space, PieceType.MECH, faction_name)
-        self.carrying_workers = set()
+@attr.s(frozen=True, slots=True)
+class Mech(_MovablePiece):
+    carrying_worker_keys = attr.ib(factory=pset)
+    typ = attr.ib(default=PieceType.MECH)
 
     def not_carrying_anything(self):
-        return super().not_carrying_anything() and not self.carrying_workers
+        return super().not_carrying_anything() and not self.carrying_worker_keys
 
     def drop_everything(self):
-        super().drop_everything()
-        self.carrying_workers.clear()
+        return attr.evolve(self.drop_everything(), carrying_worker_keys=pset())
 
 
-class Character(MovablePiece):
-    def __init__(self, board_space, faction_name):
-        super().__init__(board_space, PieceType.CHARACTER, faction_name)
+@attr.s(frozen=True, slots=True)
+class Character(_MovablePiece):
+    typ = attr.ib(default=PieceType.CHARACTER)
+    id = attr.ib(default=0)
 
 
-class Worker(MovablePiece):
-    def __init__(self, board_space, faction_name):
-        if isinstance(board_space, Structure):
-            assert False
-        super().__init__(board_space, PieceType.WORKER, faction_name)
+@attr.s(frozen=True, slots=True)
+class Worker(_MovablePiece):
+    typ = attr.ib(default=PieceType.WORKER)
+
+
+def character_key(faction_name):
+    return PieceKey(PieceType.CHARACTER, faction_name, 0)
+
+
+def worker_key(faction_name, id):
+    return PieceKey(PieceType.WORKER, faction_name, id)
+
+
+def mech_key(faction_name, mech_typ):
+    return PieceKey(PieceType.MECH, faction_name, mech_typ.value)
+
+
+def structure_key(faction_name, structure_typ):
+    return PieceKey(PieceType.MECH, faction_name, structure_typ.value)

@@ -1,61 +1,54 @@
 from game.actions.action import *
-from game.types import StructureType, TerrainType
+from game.constants import NUM_WORKERS
+from game.game_state import GameState
+from game.types import TerrainType, TopActionType
+
+import attr
 
 
-class Produce(MaybePayCost):
-    def __init__(self):
-        self.if_paid = ProduceIfPaid()
-        super().__init__('Produce', self.if_paid)
-        self.meeples_produced = 0
+@attr.s(frozen=True, slots=True)
+class ChooseNumWorkers(Choice):
+    space = attr.ib()
+    max_workers = attr.ib()
 
-    def cost(self):
-        power = 1 if self.meeples_produced > 1 else 0
-        popularity = 1 if self.meeples_produced > 3 else 0
-        coins = 1 if self.meeples_produced > 5 else 0
-        return Cost(power=power, popularity=popularity, coins=coins)
+    @classmethod
+    def new(cls, space, max_workers):
+        return cls('Choose number of workers to receive', space, max_workers)
 
-    def top_action(self):
-        return self.if_paid.top_action
+    def choose(self, agent, game_state):
+        high = self.max_workers
+        low = min(1, high)
+        return agent.choose_numeric(game_state, low, high)
 
-
-class ProduceIfPaid(StateChange):
-    def __init__(self):
-        super().__init__()
-        self.top_action = TopAction('Produce', num_cubes=1, structure_typ=StructureType.MILL)
-        self.on_one_hex = OnOneHex()
-        self.on_mill_hex = Optional(OnMillHex())
-
-    def do(self, game_state):
-
-        if self.top_action.cubes_upgraded[0]:
-            game_state.action_stack.append(Optional(self.on_one_hex))
-
-        game_state.action_stack.append(Optional(self.on_one_hex))
-        game_state.action_stack.append(self.on_one_hex)
-        if self.top_action.structure_is_built:
-            game_state.action_stack.append(self.on_mill_hex)
+    def do(self, game_state, amt):
+        return GameState.push_action(game_state, ReceiveWorkers.new(amt, self.space))
 
 
 def produce_on_space(space, game_state):
     assert not space.produced_this_turn
-    game_state.spaces_produced_this_turn.add(space)
-    space.produced_this_turn = True
+    space = attr.evolve(space, produced_this_turn=True)
+    game_state = attr.evolve(game_state, board=game_state.board.set_space(space),
+                             spaces_produced_this_turn=game_state.spaces_produced_this_turn.add(space))
     num_workers = len(space.workers)
 
     if space.terrain_typ is TerrainType.VILLAGE:
-        game_state.action_stack.append(ChooseNumWorkers(space,
-                                                        min(num_workers,
-                                                            game_state.current_player.available_workers())))
+        return GameState.push_action(game_state, ChooseNumWorkers.new(space,
+                                                                      min(num_workers,
+                                                                          game_state.current_player.available_workers()
+                                                                          )))
     else:
-        space.add_resources(space.terrain_typ.resource_type(), num_workers)
+        space = space.add_resources(space.terrain_typ.resource_type(), num_workers)
+        return attr.evolve(game_state, board=game_state.board.set_space(space))
 
 
+@attr.s(frozen=True, slots=True)
 class OnOneHex(Choice):
-    def __init__(self):
-        super().__init__('Produce on a single hex')
+    @classmethod
+    def new(cls):
+        return cls('Produce on a single hex')
 
     def choose(self, agent, game_state):
-        spaces = game_state.current_player.produceable_spaces()
+        spaces = GameState.produceable_spaces(game_state, GameState.get_current_player(game_state))
         if spaces:
             logging.debug(f'Choosing from {spaces}')
             return agent.choose_board_space(game_state, spaces)
@@ -65,32 +58,67 @@ class OnOneHex(Choice):
     def do(self, game_state, space):
         if space:
             logging.debug(f'Space chosen: {space!r}')
-            produce_on_space(space, game_state)
+            return produce_on_space(space, game_state)
         else:
             logging.debug('No spaces available for produce')
 
 
+@attr.s(frozen=True, slots=True)
 class OnMillHex(StateChange):
-    def __init__(self):
-        super().__init__('Produce on mill hex')
+    @classmethod
+    def new(cls):
+        return cls('Produce on mill hex')
 
     def do(self, game_state):
-        space = game_state.current_player.mill_space()
+        space = GameState.mill_space(game_state, game_state.current_player())
         assert space is not None
         if not space.produced_this_turn:
             produce_on_space(space, game_state)
 
 
-class ChooseNumWorkers(Choice):
-    def __init__(self, space, max_workers):
-        super().__init__('Choose number of workers to receive')
-        self.space = space
-        self.max_workers = max_workers
+@attr.s(frozen=True, slots=True)
+class ProduceIfPaid(StateChange):
+    _on_one_hex = OnOneHex.new()
+    _on_one_hex_opt = Optional.new(_on_one_hex)
+    _on_mill_hex = OnMillHex.new()
 
-    def choose(self, agent, game_state):
-        high = self.max_workers
-        low = min(1, high)
-        return agent.choose_numeric(game_state, low, high)
+    @classmethod
+    def new(cls):
+        return cls('Produce')
 
-    def do(self, game_state, amt):
-        game_state.action_stack.append(ReceiveWorkers(amt, self.space))
+    def do(self, game_state):
+        current_player = GameState.get_current_player(game_state)
+        player_mat = current_player.player_mat
+        top_action_cubes_and_structure = \
+            player_mat.top_action_cubes_and_structures_by_top_action_typ[TopActionType.PRODUCE]
+
+        if top_action_cubes_and_structure.cubes_upgraded[0]:
+            game_state = GameState.push_action(game_state, ProduceIfPaid._on_one_hex_opt)
+
+        game_state = GameState.push_action(game_state, ProduceIfPaid._on_one_hex)
+        game_state = GameState.push_action(game_state, ProduceIfPaid._on_one_hex)
+
+        # Put the mill hex on top so we don't have to worry about it getting taken by
+        # one of the other produce actions
+        if top_action_cubes_and_structure.structure_is_built:
+            game_state = GameState.push_action(game_state, ProduceIfPaid._on_mill_hex)
+        return game_state
+
+
+@attr.s(frozen=True, slots=True)
+class Produce(MaybePayCost):
+    _if_paid = ProduceIfPaid.new()
+
+    @classmethod
+    def new(cls):
+        return cls('Produce', Produce._if_paid)
+
+    def cost(self, game_state):
+        produced_workers = len(GameState.get_current_player(game_state).workers) - 2
+        power = 1 if produced_workers > 1 else 0
+        popularity = 1 if produced_workers > 3 else 0
+        coins = 1 if produced_workers > 5 else 0
+        return Cost.new(power=power, popularity=popularity, coins=coins)
+
+    def top_action(self):
+        return self.if_paid.top_action

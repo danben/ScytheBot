@@ -1,34 +1,41 @@
 from game.actions.action import *
 from game.types import Benefit, BottomActionType, ResourceType
 
+import attr
 
+
+@attr.s(frozen=True, slots=True)
+class ChooseDeploySpace(Choice):
+    mech = attr.ib()
+
+    @classmethod
+    def new(cls, mech):
+        return cls('Choose space to deploy mech to', mech)
+
+    def choose(self, agent, game_state):
+        eligible_spaces = GameState.board_coords_with_workers(game_state, GameState.get_current_player(game_state))
+        return agent.choose_board_space(game_state, eligible_spaces)
+
+    def do(self, game_state, board_coords):
+        return GameState.deploy_mech(game_state, GameState.get_current_player(game_state), self.mech, board_coords)
+
+
+@attr.s(frozen=True, slots=True)
 class DeployMech(Choice):
-    def __init__(self):
-        super().__init__('Choose mech to deploy')
+    @classmethod
+    def new(cls):
+        return cls('Choose mech to deploy')
 
     def choose(self, agent, game_state):
         return agent.choose_mech_to_deploy(game_state)
 
     def do(self, game_state, mech):
-        game_state.action_stack.append(ChooseDeploySpace(mech))
+        return GameState.push_action(game_state, ChooseDeploySpace.new(mech))
 
 
-class Deploy(BottomAction):
-    enlist_benefit = Benefit.COINS
-    action_benefit = DeployMech()
-
-    def __init__(self, maxcost, mincost, payoff):
-        super().__init__(BottomActionType.DEPLOY, ResourceType.METAL, maxcost,
-                         mincost, payoff, Deploy.enlist_benefit, Deploy.action_benefit)
+_deploy_mech = DeployMech.new()
 
 
-class ChooseDeploySpace(Choice):
-    def __init__(self, mech):
-        super().__init__()
-        self.mech = mech
-
-    def choose(self, agent, game_state):
-        return agent.choose_board_space(game_state, list(game_state.current_player.spaces_with_workers()))
-
-    def do(self, game_state, space):
-        game_state.current_player.deploy_mech(self.mech, space, game_state.board)
+def deploy(maxcost, mincost, payoff):
+    return BottomAction.new(BottomActionType.DEPLOY, ResourceType.METAL, maxcost, mincost, payoff,
+                            Benefit.COINS, _deploy_mech)

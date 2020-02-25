@@ -1,13 +1,15 @@
-import numpy as np
 from game.types import FactionName, PieceType, TerrainType
 
+import attr
+import numpy as np
 
+
+@attr.s(frozen=True, slots=True)
 class Faction:
-    def __init__(self, name, starting_power, starting_combat_cards, riverwalk_destinations):
-        self.name = name
-        self.starting_power = starting_power
-        self.starting_combat_cards = starting_combat_cards
-        self.riverwalk_destinations = riverwalk_destinations
+    name = attr.ib()
+    starting_power = attr.ib()
+    starting_combat_cards = attr.ib()
+    riverwalk_destinations = attr.ib()
 
     def add_riverwalk_adjacencies(self, player_adjacencies, board):
         # If two hexes on the board are physically adjacent but not yet effectively adjacent,
@@ -44,13 +46,12 @@ class Faction:
                     adjacent_spaces.append(other_space)
 
 
+@attr.s(frozen=True, slots=True)
 class Nordic(Faction):
-    DONT_USE_ARTILLERY = 0
-    USE_ARTILLERY = 1
-
-    def __init__(self):
-        super().__init__(FactionName.NORDIC, starting_power=4, starting_combat_cards=1,
-                         riverwalk_destinations=[TerrainType.FOREST, TerrainType.MOUNTAIN])
+    @classmethod
+    def new(cls):
+        return cls(FactionName.NORDIC, starting_power=4, starting_combat_cards=1,
+                   riverwalk_destinations=[TerrainType.FOREST, TerrainType.MOUNTAIN])
 
     def add_teleport_adjacencies(self, player_adjacencies, board):
         # Can move to/from lakes. Lakes already are considered effectively adjacent to everything around them.
@@ -66,10 +67,12 @@ class Nordic(Faction):
         Faction.add_adjacencies_from_board_adjacencies(player_adjacencies, board, PieceType.WORKER, should_add)
 
 
+@attr.s(frozen=True, slots=True)
 class Rusviet(Faction):
-    def __init__(self):
-        super().__init__(FactionName.RUSVIET, starting_power=3, starting_combat_cards=2,
-                         riverwalk_destinations=[TerrainType.FARM, TerrainType.VILLAGE])
+    @classmethod
+    def new(cls):
+        return cls(FactionName.RUSVIET, starting_power=3, starting_combat_cards=2,
+                   riverwalk_destinations=[TerrainType.FARM, TerrainType.VILLAGE])
 
     def extra_adjacent_spaces(self, piece, board):
         ret = []
@@ -84,10 +87,12 @@ class Rusviet(Faction):
         return ret
 
 
+@attr.s(frozen=True, slots=True)
 class Polania(Faction):
-    def __init__(self):
-        super().__init__(FactionName.POLANIA, starting_power=2, starting_combat_cards=3,
-                         riverwalk_destinations=[TerrainType.VILLAGE, TerrainType.MOUNTAIN])
+    @classmethod
+    def new(cls):
+        return cls(FactionName.POLANIA, starting_power=2, starting_combat_cards=3,
+                   riverwalk_destinations=[TerrainType.VILLAGE, TerrainType.MOUNTAIN])
 
     def add_teleport_adjacencies(self, player_adjacencies, board):
         for piece_typ in [PieceType.CHARACTER, PieceType.MECH]:
@@ -102,11 +107,14 @@ class Polania(Faction):
             Faction.add_adjacencies_from_board_adjacencies(player_adjacencies, board, piece_typ, should_add)
 
 
+@attr.s(frozen=True, slots=True)
 class Crimea(Faction):
-    def __init__(self):
-        super().__init__(FactionName.CRIMEA, starting_power=5, starting_combat_cards=5,
-                         riverwalk_destinations=[TerrainType.FARM, TerrainType.TUNDRA])
-        self.spent_combat_card_as_resource_this_turn = False
+    spent_combat_card_as_resource_this_turn = attr.ib(default=False)
+
+    @classmethod
+    def new(cls):
+        return cls(FactionName.CRIMEA, starting_power=5, starting_combat_cards=5,
+                   riverwalk_destinations=[TerrainType.FARM, TerrainType.TUNDRA])
 
     def add_teleport_adjacencies(self, player_adjacencies, board):
         my_home_base = board.home_bases[FactionName.CRIMEA]
@@ -121,10 +129,12 @@ class Crimea(Faction):
                         adjacent_spaces.append(inactive_home_base)
 
 
+@attr.s(frozen=True, slots=True)
 class Saxony(Faction):
-    def __init__(self):
-        super().__init__(FactionName.SAXONY, starting_power=1, starting_combat_cards=4,
-                         riverwalk_destinations=[TerrainType.FOREST, TerrainType.MOUNTAIN])
+    @classmethod
+    def new(cls):
+        return cls(FactionName.SAXONY, starting_power=1, starting_combat_cards=4,
+                   riverwalk_destinations=[TerrainType.FOREST, TerrainType.MOUNTAIN])
 
     def extra_adjacent_spaces(self, piece, board):
         def is_tunnel_or_my_mountain(space):
@@ -140,6 +150,6 @@ class Saxony(Faction):
 
 def choose(num):
     assert num == 2
-    ret = [Rusviet(), Saxony()]
+    ret = [Rusviet.new(), Saxony.new()]
     np.random.shuffle(ret)
     return ret

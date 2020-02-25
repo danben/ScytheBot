@@ -3,19 +3,190 @@ from game.actions.combat import MaybeCombat
 from game.components import Board
 from game.types import Benefit, ResourceType, StructureType
 
+import attr
 import logging
 
 
-class MoveGain(Boolean):
-    def __init__(self):
-        self._top_action = TopAction('Move / Gain', num_cubes=2, structure_typ=StructureType.MINE)
-        self.move = Move(self._top_action)
-        self.gain = Gain(self._top_action)
-        super().__init__(self.move, self.gain)
+@attr.s(frozen=True, slots=True)
+class LoadResources(Choice):
+    piece_key = attr.ib()
+    resource_typ = attr.ib()
 
-    def top_action(self):
-        return self._top_action
+    @classmethod
+    def new(cls, piece_key, resource_typ):
+        return cls(f'Maybe load some {resource_typ} onto {piece_key}', piece_key, resource_typ)
 
+    def choose(self, agent, game_state):
+        piece = game_state.pieces_by_key[self.piece_key]
+        return agent.choose_numeric(game_state, 0, piece.board_space.amount_of(self.resource_typ))
+
+    def do(self, game_state, amt):
+        piece = game_state.pieces_by_key[self.piece_key]
+        assert self.piece_key in piece.board_space.all_piece_keys()
+        if amt:
+            carrying_resources = piece.carrying_resources
+            resource_amt = carrying_resources[self.resource_typ] + amt
+            carrying_resources = carrying_resources.set(self.resource_typ, resource_amt)
+            piece = attr.evolve(piece, carrying_resources=carrying_resources)
+            game_state = GameState.set_piece(game_state, piece)
+        return game_state
+
+
+@attr.s(frozen=True, slots=True)
+class LoadWorkers(Choice):
+    mech_key = attr.ib()
+
+    @classmethod
+    def new(cls, mech_key):
+        return cls(f'Load workers onto {mech_key}', mech_key)
+
+    def choose(self, agent, game_state):
+        board_coords = GameState.get_board_coords_for_piece_key(game_state, self.mech_key)
+        space = game_state.board.get_space(board_coords)
+        max_workers = len(space.workers)
+        logging.debug(f'Can choose up to {max_workers} workers from space {space}')
+        return agent.choose_numeric(game_state, 0, max_workers)
+
+    def do(self, game_state, amt):
+        mech = game_state.pieces_by_key(self.mech_key)
+        board_space = mech.board_space
+        assert self.mech_key in board_space.all_piece_keys()
+        if amt:
+            added = 0
+            logging.debug(f'Load {amt} workers from {board_space}')
+            for worker_key in board_space.worker_keys:
+                mech = attr.evolve(mech, carrying_worker_keys=mech.carrying_worker_keys.add(worker_key))
+                added += 1
+                if added == amt:
+                    return GameState.set_piece(game_state, mech)
+            assert False
+        return game_state
+
+
+@attr.s(frozen=True, slots=True)
+class Gain(StateChange):
+    @classmethod
+    def new(cls):
+        return cls('Gain coins')
+
+    def do(self, game_state):
+        current_player = GameState.get_current_player(game_state)
+        player_mat = current_player.player_mat
+        top_action_cubes_and_structure = \
+            player_mat.top_action_cubes_and_structure_by_top_action_typ[TopActionType.MOVEGAIN]
+        coins_to_gain = 2 if top_action_cubes_and_structure.cubes_upgraded[1] else 1
+        return GameState.give_reward_to_player(game_state, current_player, Benefit.COINS, coins_to_gain)
+
+
+@attr.s(frozen=True, slots=True)
+class MovePieceToSpaceAndDropCarryables(StateChange):
+    piece_key = attr.ib()
+    board_coords = attr.ib()
+
+    @classmethod
+    def new(cls, piece_key, board_coords):
+        return cls(f'Moving from {piece_key} to {board_coords}', piece_key, board_coords)
+
+    def do(self, game_state):
+        piece = game_state.pieces_by_key[self.piece_key]
+        assert piece.board_space.coords != self.board_coords
+        new_space = game_state.board.get_space(self.board_coords)
+        controller_of_new_space = new_space.controller()
+        current_player = GameState.get_current_player(game_state)
+        current_player_faction = current_player.faction_name()
+        if controller_of_new_space and controller_of_new_space is not current_player_faction:
+            piece = attr.evolve(piece, moved_into_enemy_territory_this_turn=True)
+            game_state = GameState.set_piece(game_state, piece)
+            logging.debug(f'{current_player_faction!r} moved a piece into enemy territory'
+                          f' controlled by {controller_of_new_space!r}')
+            if piece.is_plastic() and new_space.contains_no_enemy_plastic(current_player_faction):
+                to_scare = set()
+                for worker_key in new_space.worker_keys:
+                    worker = game_state.pieces_by_key[worker_key]
+                    if worker.faction_name is not current_player_faction:
+                        to_scare.add(worker)
+
+                for worker in to_scare:
+                    game_state = GameState.move_piece(game_state, worker,
+                                                      game_state.board.home_base(worker.faction_name).coords)
+
+                current_player = current_player.remove_popularity(len(to_scare))
+                game_state = GameState.set_player(game_state, current_player)
+
+        old_space = game_state.board.get_space(piece.board_coords)
+        for resource_typ in ResourceType:
+            if piece.carrying_resources[resource_typ]:
+                new_space = new_space.add_resources(resource_typ, piece.carrying_resources[resource_typ])
+                old_space = old_space.remove_resources(resource_typ, piece.carrying_resources[resource_typ])
+
+        if piece.is_mech():
+            new_worker_keys = new_space.worker_keys
+            old_worker_keys = old_space.worker_keys
+            for worker_key in piece.carrying_worker_keys:
+                worker = game_state.pieces_by_key[worker_key]
+                assert worker.board_coords != self.board_coords
+                worker = attr.evolve(worker, board_coords=self.board_coords)
+                game_state = GameState.set_piece(game_state, worker)
+                logging.debug(f'Mech carried worker to {self.board_coords}')
+                new_worker_keys = new_worker_keys.add(worker)
+                old_worker_keys = old_worker_keys.remove(worker)
+                assert worker_key in worker.board_space.all_piece_keys()
+            new_space = attr.evolve(new_space, worker_keys=new_worker_keys)
+            old_space = attr.evolve(old_space, worker_keys=old_worker_keys)
+
+        board = game_state.board.set_space(new_space).set_space(old_space)
+        game_state = attr.evolve(game_state, board=board)
+        game_state = GameState.move_piece(game_state, game_state.board, piece, self.board_coords)
+        piece = attr.evolve(piece, moved_this_turn=True).drop_everything()
+        game_state = GameState.set_piece(game_state, piece)
+        return game_state
+
+
+@attr.s(frozen=True, slots=True)
+class MovePieceOneSpace(Choice):
+    piece_key = attr.ib()
+
+    @classmethod
+    def new(cls, piece_key):
+        return cls('Move {piece_key} one space', piece_key)
+
+    def choose(self, agent, game_state):
+        effective_adjacent_space_coords = GameState.effective_adjacent_space_coords(game_state, self.piece_key)
+        logging.debug(f'Choosing from {effective_adjacent_space_coords}')
+        assert game_state.pieces_by_key[self.piece_key].board_coords not in effective_adjacent_space_coords
+        return agent.choose_board_space(game_state, effective_adjacent_space_coords)
+
+    def do(self, game_state, board_coords):
+        assert self.piece_key in \
+               game_state.board.get_space(game_state.pieces_by_key[self.piece_key].board_coords).all_piece_keys()
+        return GameState.push_action(game_state, MovePieceToSpaceAndDropCarryables.new(self.piece_key, board_coords))
+
+
+@attr.s(frozen=True, slots=True)
+class LoadAndMovePiece(StateChange):
+    piece_key = attr.ib()
+
+    @classmethod
+    def new(cls, piece_key):
+        return cls(None, piece_key)
+
+    def do(self, game_state):
+        piece = game_state.pieces_by_key[self.piece_key]
+        cur_space = game_state.board.get_space(piece.board_coords)
+        assert self.piece_key in cur_space.all_piece_keys()
+        # This is how we "short-circuit" the move action if a piece walked into an enemy-controlled
+        # territory.
+        if piece.moved_into_enemy_territory_this_turn:
+            return
+
+        assert piece.not_carrying_anything()
+        game_state.action_stack.append(MovePieceOneSpace.new(self.piece_key))
+        for r in ResourceType:
+            if cur_space.amount_of(r):
+                game_state = GameState.push_action(game_state, LoadResources.new(self.piece_key, r))
+        if piece.is_mech() and cur_space.workers:
+            game_state = GameState.push_action(game_state, LoadWorkers.new(self.piece_key))
+        return game_state
 
 # The outer class represents the entire move action for a single piece. The steps are:
 # 1. Choose a piece to move from pieces that haven't moved this turn. Only now do we know how much move we can have.
@@ -26,170 +197,56 @@ class MoveGain(Boolean):
 # 2biii. Mark the piece as having moved this turn.
 # 2c. Drop all your stuff
 
-class Gain(StateChange):
-    def __init__(self, top_action):
-        super().__init__('Gain coins')
-        self._top_action = top_action
 
-    def do(self, game_state):
-        coins_to_gain = 2 if self._top_action.cubes_upgraded[1] else 1
-        game_state.give_reward_to_player(game_state.current_player, Benefit.COINS, coins_to_gain)
-
-
+@attr.s(frozen=True, slots=True)
 class MoveOnePiece(Choice):
-    def __init__(self):
-        super().__init__()
+    @classmethod
+    def new(cls):
+        return cls('Move one piece')
 
     def choose(self, agent, game_state):
         # Here we don't let someone pick a piece if it happens to be a worker that was dropped into
         # enemy territory this turn. That would get around the [moved_this_turn] check, so we explicitly
         # check to see that we're not starting in enemy territory. There would be no legal way for a mech
         # or character to start in enemy territory anyway.
-        movable_pieces = [piece for piece in game_state.current_player.movable_pieces()
-                          if piece.board_space.controller() is game_state.current_player.faction_name()]
+        current_player = GameState.get_current_player(game_state)
+        movable_pieces = GameState.movable_pieces(game_state, current_player)
+        movable_pieces = [piece for piece in movable_pieces
+                          if game_state.board.get_space(piece.board_coords).controller()
+                          is current_player.faction_name()]
         logging.debug(f'Choosing a piece from {movable_pieces}')
         return agent.choose_piece(game_state, movable_pieces)
 
     def do(self, game_state, piece):
         logging.debug(f'Chosen: {piece}')
-        for _ in range(game_state.current_player.base_move_for_piece_type(piece.typ) - 1):
-            game_state.action_stack.append(Optional(LoadAndMovePiece(piece)))
-        game_state.action_stack.append(LoadAndMovePiece(piece))
+        for _ in range(GameState.get_current_player(game_state).base_move_for_piece_type(piece.typ) - 1):
+            game_state = GameState.push_action(game_state, Optional.new(LoadAndMovePiece.new(piece)))
+        return GameState.push_action(game_state, LoadAndMovePiece.new(piece))
 
 
 class Move(StateChange):
-    maybe_combat = MaybeCombat()
-    move_one_piece = MoveOnePiece()
-    optional_move = Optional(move_one_piece)
+    _maybe_combat = MaybeCombat.new()
+    _move_one_piece = MoveOnePiece.new()
+    _optional_move = Optional.new(_move_one_piece)
 
-    def __init__(self, top_action):
-        super().__init__('Move')
-        self._top_action = top_action
-
-    def do(self, game_state):
-        game_state.action_stack.append(Move.maybe_combat)
-        game_state.action_stack.append(Move.optional_move)
-        if self._top_action.cubes_upgraded[0]:
-            game_state.action_stack.append(Move.optional_move)
-        game_state.action_stack.append(Move.move_one_piece)
-
-
-class LoadAndMovePiece(StateChange):
-    def __init__(self, piece):
-        super().__init__()
-        self.piece = piece
+    @classmethod
+    def new(cls):
+        return cls('Move')
 
     def do(self, game_state):
-        assert self.piece in self.piece.board_space.all_pieces()
-        # This is how we "short-circuit" the move action if a piece walked into an enemy-controlled
-        # territory.
-        if self.piece.moved_into_enemy_territory_this_turn:
-            return
-
-        assert self.piece.not_carrying_anything()
-        cur_space = self.piece.board_space
-        game_state.action_stack.append(MovePieceOneSpace(self.piece))
-        for r in ResourceType:
-            if cur_space.amount_of(r):
-                game_state.action_stack.append(LoadResources(self.piece, r))
-        if self.piece.is_mech() and cur_space.workers:
-            game_state.action_stack.append(LoadWorkers(self.piece))
+        game_state = GameState.push_action(game_state, Move._maybe_combat)
+        game_state = GameState.push_action(game_state, Move._optional_move)
+        player_mat = GameState.get_current_player(game_state).player_mat
+        top_action_cubes_and_structure = \
+            player_mat.top_action_cubes_and_structure_by_top_action_typ[TopActionType.MOVEGAIN]
+        if top_action_cubes_and_structure.cubes_upgraded[0]:
+            game_state = GameState.push_action(game_state, Move._optional_move)
+        return GameState.push_action(game_state, Move._move_one_piece)
 
 
-class LoadResources(Choice):
-    def __init__(self, piece, resource_typ):
-        super().__init__()
-        self.piece = piece
-        self.resource_typ = resource_typ
-
-    def choose(self, agent, game_state):
-        return agent.choose_numeric(game_state, 0, self.piece.board_space.amount_of(self.resource_typ))
-
-    def do(self, game_state, amt):
-        assert self.piece in self.piece.board_space.all_pieces()
-        if amt:
-            logging.debug(f'Load {amt} {self.resource_typ!r} onto {self.piece!r}')
-            self.piece.carrying_resources[self.resource_typ] += amt
+_move = Move.new()
+_gain = Gain.new()
 
 
-class LoadWorkers(Choice):
-    def __init__(self, mech):
-        super().__init__(f'Load workers onto {mech!r}')
-        self.mech = mech
-
-    def choose(self, agent, game_state):
-        logging.debug(f'Can choose up to {len(self.mech.board_space.workers)} workers'
-                      f' from space {self.mech.board_space!r}')
-        return agent.choose_numeric(game_state, 0, len(self.mech.board_space.workers))
-
-    def do(self, game_state, amt):
-        assert self.mech in self.mech.board_space.all_pieces()
-        if amt:
-            added = 0
-            logging.debug(f'Load {amt} workers from {self.mech.board_space!r}')
-            for worker in self.mech.board_space.workers:
-                self.mech.carrying_workers.add(worker)
-                added += 1
-                if added == amt:
-                    return
-            assert False
-
-
-class MovePieceOneSpace(Choice):
-    def __init__(self, piece):
-        super().__init__()
-        self.piece = piece
-
-    def choose(self, agent, game_state):
-        logging.debug(f'{self.piece} leaving from {self.piece.board_space}')
-        effective_adjacent_spaces = game_state.current_player.effective_adjacent_spaces(self.piece, game_state.board)
-        logging.debug(f'Choosing from {effective_adjacent_spaces}')
-        assert self.piece.board_space not in effective_adjacent_spaces
-        return agent.choose_board_space(game_state, effective_adjacent_spaces)
-
-    def do(self, game_state, space):
-        assert self.piece in self.piece.board_space.all_pieces()
-        game_state.action_stack.append(MovePieceToSpaceAndDropCarryables(self.piece, space))
-
-
-class MovePieceToSpaceAndDropCarryables(StateChange):
-    def __init__(self, piece, board_space):
-        super().__init__()
-        self.piece = piece
-        self.board_space = board_space
-
-    def do(self, game_state):
-        if self.piece.board_space is self.board_space:
-            logging.debug(f'Moving from {self.piece.board_space} to {self.board_space}')
-        assert self.piece.board_space is not self.board_space
-        controller_of_new_space = self.board_space.controller()
-        current_player_faction = game_state.current_player.faction_name()
-        if controller_of_new_space and controller_of_new_space is not current_player_faction:
-            self.piece.moved_into_enemy_territory_this_turn = True
-            logging.debug(f'{current_player_faction!r} moved a piece into enemy territory'
-                          f' controlled by {controller_of_new_space!r}')
-            if self.piece.is_plastic() and self.board_space.contains_no_enemy_plastic(current_player_faction):
-                to_scare = set()
-                for worker in self.board_space.workers:
-                    if worker.faction_name is not current_player_faction:
-                        to_scare.add(worker)
-
-                for worker in to_scare:
-                    Board.move_piece(worker, game_state.board.home_base(worker.faction_name))
-                game_state.current_player.remove_popularity(min(len(to_scare), game_state.current_player.popularity()))
-
-        for resource_typ in ResourceType:
-            if self.piece.carrying_resources[resource_typ]:
-                self.board_space.add_resources(resource_typ, self.piece.carrying_resources[resource_typ])
-                self.piece.board_space.remove_resources(resource_typ, self.piece.carrying_resources[resource_typ])
-        if self.piece.is_mech():
-            for worker in self.piece.carrying_workers:
-                assert worker.board_space is not self.board_space
-                worker.board_space = self.board_space
-                logging.debug(f'Mech carried worker to {self.board_space}')
-                self.board_space.workers.add(worker)
-                self.piece.board_space.workers.remove(worker)
-                assert worker in worker.board_space.all_pieces()
-        Board.move_piece(self.piece, self.board_space)
-        self.piece.moved_this_turn = True
-        self.piece.drop_everything()
+def move_gain():
+    return Boolean.new(_move, _gain)

@@ -1,3 +1,6 @@
+import game.components.piece as piece
+import game.constants as constants
+
 from enum import Enum
 
 
@@ -7,7 +10,7 @@ class Benefit(Enum):
     COMBAT_CARDS = 3
     COINS = 4
 
-    def __repr__(self):
+    def __str__(self):
         if self is Benefit.POWER:
             return "power"
         elif self is Benefit.POPULARITY:
@@ -17,6 +20,8 @@ class Benefit(Enum):
         elif self is Benefit.COINS:
             return "coins"
 
+        assert False
+
 
 class BottomActionType(Enum):
     UPGRADE = 1
@@ -24,7 +29,7 @@ class BottomActionType(Enum):
     BUILD = 3
     ENLIST = 4
 
-    def __repr__(self):
+    def __str__(self):
         if self is BottomActionType.UPGRADE:
             return "Upgrade"
         elif self is BottomActionType.DEPLOY:
@@ -34,6 +39,15 @@ class BottomActionType(Enum):
         elif self is BottomActionType.ENLIST:
             return "Enlist"
 
+        assert False
+
+
+class TopActionType(Enum):
+    MOVEGAIN = 0
+    BOLSTER = 1
+    PRODUCE = 2
+    TRADE = 3
+
 
 class FactionName(Enum):
     RUSVIET = 1
@@ -42,7 +56,7 @@ class FactionName(Enum):
     POLANIA = 4
     SAXONY = 5
 
-    def __repr__(self):
+    def __str__(self):
         if self is FactionName.RUSVIET:
             return "Rusviet"
         elif self is FactionName.CRIMEA:
@@ -54,6 +68,8 @@ class FactionName(Enum):
         elif self is FactionName.SAXONY:
             return "Saxony"
 
+        assert False
+
 
 class PieceType(Enum):
     WORKER = 1
@@ -61,7 +77,7 @@ class PieceType(Enum):
     CHARACTER = 3
     STRUCTURE = 4
 
-    def __repr__(self):
+    def __str__(self):
         if self is PieceType.WORKER:
             return "worker"
         elif self is PieceType.MECH:
@@ -71,12 +87,55 @@ class PieceType(Enum):
         elif self is PieceType.STRUCTURE:
             return "structure"
 
+        assert False
+
+    def num_pieces(self):
+        if self is PieceType.WORKER:
+            return constants.NUM_WORKERS
+        elif self is PieceType.MECH:
+            return constants.NUM_MECHS
+        elif self is PieceType.STRUCTURE:
+            return constants.NUM_STRUCTURES
+        elif self is PieceType.CHARACTER:
+            return 1
+
+        assert False
+
+    def ctor(self):
+        if self is PieceType.WORKER:
+            return piece.Worker
+        elif self is PieceType.MECH:
+            return piece.Mech
+        elif self is PieceType.CHARACTER:
+            return piece.Character
+
+        assert False
+
+
+class MechType(Enum):
+    RIVERWALK = 0
+    TELEPORT = 1
+    COMBAT = 2
+    SPEED = 3
+
 
 class StructureType(Enum):
     MILL = 1
     MONUMENT = 2
     MINE = 3
     ARMORY = 4
+
+    def __str__(self):
+        if self is StructureType.MILL:
+            return "mill"
+        elif self is StructureType.MONUMENT:
+            return "monument"
+        elif self is StructureType.MINE:
+            return "mine"
+        elif self is StructureType.ARMORY:
+            return "armory"
+
+        assert False
 
 
 class PlayerMatName(Enum):
@@ -86,7 +145,7 @@ class PlayerMatName(Enum):
     MECHANICAL = 4
     AGRICULTURAL = 5
 
-    def __repr__(self):
+    def __str__(self):
         if self is PlayerMatName.INDUSTRIAL:
             return "Industrial"
         elif self is PlayerMatName.ENGINEERING:
@@ -98,6 +157,8 @@ class PlayerMatName(Enum):
         elif self is PlayerMatName.AGRICULTURAL:
             return "Agricultural"
 
+        assert False
+
 
 class ResourceType(Enum):
     WOOD = 1
@@ -105,7 +166,7 @@ class ResourceType(Enum):
     OIL = 3
     FOOD = 4
 
-    def __repr__(self):
+    def __str__(self):
         if self is ResourceType.WOOD:
             return "wood"
         elif self is ResourceType.METAL:
@@ -115,6 +176,7 @@ class ResourceType(Enum):
         elif self is ResourceType.FOOD:
             return "food"
 
+        assert False
 
 class StarType(Enum):
     UPGRADE = 1
@@ -127,7 +189,7 @@ class StarType(Enum):
     POPULARITY = 8
     POWER = 9
 
-    def __repr__(self):
+    def __str__(self):
         if self is StarType.UPGRADE:
             return "upgrade"
         elif self is StarType.MECH:
@@ -146,6 +208,8 @@ class StarType(Enum):
             return "popularity"
         elif self is StarType.POWER:
             return "power"
+
+        assert False
 
 
 class TerrainType(Enum):
@@ -168,7 +232,7 @@ class TerrainType(Enum):
         elif self is TerrainType.FOREST:
             return ResourceType.WOOD
 
-    def __repr__(self):
+    def __str__(self):
         if self is TerrainType.MOUNTAIN:
             return "mountain"
         elif self is TerrainType.TUNDRA:
@@ -185,3 +249,5 @@ class TerrainType(Enum):
             return "lake"
         elif self is TerrainType.HOME_BASE:
             return "home base"
+
+        assert False

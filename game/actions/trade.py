@@ -1,78 +1,94 @@
-from game.actions import Boolean, Choice, Cost, MaybePayCost, Optional, ReceiveBenefit, StateChange, TopAction
-from game.types import Benefit, StructureType
+from game.actions import Boolean, Choice, Cost, MaybePayCost, Optional, ReceiveBenefit, StateChange
+from game.game_state import GameState
+from game.types import Benefit, TopActionType
+
+import attr
 
 
-class Trade(MaybePayCost):
-    def __init__(self):
-        self.if_paid = TradeIfPaid()
-        super().__init__('Trade', self.if_paid)
+@attr.s(frozen=True, slots=True)
+class ChooseBoardSpaceForResource(Choice):
+    resource_typ = attr.ib()
 
-    def cost(self):
-        return Cost(coins=1)
+    @classmethod
+    def new(cls, chosen):
+        return cls('Choose board space to receive {chosen}', chosen)
 
-    def top_action(self):
-        return self.if_paid.top_action
+    def choose(self, agent, game_state):
+        current_player = GameState.get_current_player(game_state)
+        eligible_spaces = GameState.board_coords_with_workers(game_state, current_player)
+        return agent.choose_board_space(game_state, eligible_spaces)
 
-
-class TradeIfPaid(StateChange):
-    def __init__(self):
-        super().__init__()
-        self.top_action = TopAction('Trade', num_cubes=1, structure_typ=StructureType.ARMORY)
-        self.choice = ResourcesVsPopularity(self.top_action)
-        self.no_choice = GainPopularity(self.top_action)
-
-    def do(self, game_state):
-        if self.top_action.structure_is_built:
-            game_state.action_stack.append(ReceiveBenefit(Benefit.POWER))
-        if game_state.current_player.spaces_with_workers():
-            game_state.action_stack.append(self.choice)
-        else:
-            game_state.action_stack.append(self.no_choice)
+    def do(self, game_state, chosen):
+        return attr.evolve(game_state, board=game_state.board.set_space(chosen.add_resources(self.resource_typ, 1)))
 
 
-class ResourcesVsPopularity(Boolean):
-    def __init__(self, top_action):
-        super().__init__(GainResources(), GainPopularity(top_action))
-
-
-class GainResources(StateChange):
-    def __init__(self):
-        super().__init__('Gain resources')
-        self.gain_one_resource = ChooseResourceType()
-
-    def do(self, game_state):
-        game_state.action_stack.append(Optional(self.gain_one_resource))
-        game_state.action_stack.append(self.gain_one_resource)
-
-
+@attr.s(frozen=True, slots=True)
 class ChooseResourceType(Choice):
-    def __init__(self):
-        super().__init__('Choose resource type')
+    @classmethod
+    def new(cls):
+        return cls('Choose resource type')
 
     def choose(self, agent, game_state):
         return agent.choose_resource_type(game_state)
 
     def do(self, game_state, chosen):
-        game_state.action_stack.append(ChooseBoardSpaceForResource(chosen))
+        return GameState.push_action(game_state, ChooseBoardSpaceForResource.new(chosen))
 
 
-class ChooseBoardSpaceForResource(Choice):
-    def __init__(self, resource_typ):
-        super().__init__('Choose board space to receive {resource_typ!r}')
-        self.resource_typ = resource_typ
+@attr.s(frozen=True, slots=True)
+class GainResources(StateChange):
+    _choose_resource_type = ChooseResourceType.new()
+    _choose_resource_type_opt = Optional.new(_choose_resource_type)
 
-    def choose(self, agent, game_state):
-        return agent.choose_board_space(game_state, list(game_state.current_player.spaces_with_workers()))
-
-    def do(self, game_state, chosen):
-        chosen.add_resources(self.resource_typ, 1)
-
-
-class GainPopularity(StateChange):
-    def __init__(self, top_action):
-        super().__init__('Gain popularity')
-        self.top_action = top_action
+    @classmethod
+    def new(cls):
+        return cls('Gain resources for trade action')
 
     def do(self, game_state):
-        popularity = 2 if self.top_action.cubes_upgraded[0] else 1
-        game_state.give_reward_to_player(game_state.current_player, Benefit.POPULARITY, popularity)
+        game_state = GameState.push_action(game_state, GainResources._choose_resource_type_opt)
+        game_state.action_stack.append(GainResources._choose_resource_type)
+
+
+@attr.s(frozen=True, slots=True)
+class GainPopularity(StateChange):
+    @classmethod
+    def new(cls):
+        return cls('Gain popularity for Trade action')
+
+    def do(self, game_state):
+        current_player = GameState.get_current_player(game_state)
+        player_mat = current_player.player_mat
+        top_action_cubes_and_structure = \
+            player_mat.top_action_cubes_and_structures_by_top_action_typ[TopActionType.TRADE]
+        popularity = 2 if top_action_cubes_and_structure.cubes_upgraded[0] else 1
+        return GameState.give_reward_to_player(game_state, current_player, Benefit.POPULARITY, popularity)
+
+
+@attr.s(frozen=True, slots=True)
+class TradeIfPaid(StateChange):
+    gain_popularity = GainPopularity.new()
+    resources_vs_popularity = Boolean.new(GainResources.new(), gain_popularity)
+
+    @classmethod
+    def new(cls):
+        return cls('Attempting Trade action')
+
+    def do(self, game_state):
+        if game_state.get_current_player().structure_is_built(TopActionType.TRADE):
+            game_state = game_state.push_action(ReceiveBenefit.new(Benefit.POWER, amt=1))
+        if GameState.board_coords_with_workers(game_state, game_state.get_current_player()):
+            return game_state.push_action(TradeIfPaid.resources_vs_popularity)
+        else:
+            return game_state.push_action(TradeIfPaid.gain_popularity)
+
+
+@attr.s(frozen=True, slots=True)
+class Trade(MaybePayCost):
+    _if_paid = TradeIfPaid.new()
+
+    @classmethod
+    def new(cls):
+        return cls('Trade', Trade.if_paid)
+
+    def cost(self):
+        return Cost.new(coins=1)
