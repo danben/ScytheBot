@@ -12,7 +12,11 @@ class PieceKey:
     faction_name = attr.ib()
     id = attr.ib()
 
+    def __str__(self):
+        return f'{self.faction_name} {self.piece_typ}'
 
+
+# TODO: dedup attributes between these two classes
 @attr.s(frozen=True, slots=True)
 class _Piece:
     board_coords = attr.ib()
@@ -75,7 +79,7 @@ class Mech(_MovablePiece):
         return super().not_carrying_anything() and not self.carrying_worker_keys
 
     def drop_everything(self):
-        return attr.evolve(self.drop_everything(), carrying_worker_keys=pset())
+        return attr.evolve(_MovablePiece.drop_everything(self), carrying_worker_keys=pset())
 
 
 @attr.s(frozen=True, slots=True)
@@ -93,13 +97,13 @@ def character_key(faction_name):
     return PieceKey(PieceType.CHARACTER, faction_name, 0)
 
 
-def worker_key(faction_name, id):
-    return PieceKey(PieceType.WORKER, faction_name, id)
+def worker_key(faction_name, piece_id):
+    return PieceKey(PieceType.WORKER, faction_name, piece_id)
 
 
-def mech_key(faction_name, mech_typ):
-    return PieceKey(PieceType.MECH, faction_name, mech_typ.value)
+def mech_key(faction_name, mech_id):
+    return PieceKey(PieceType.MECH, faction_name, mech_id)
 
 
 def structure_key(faction_name, structure_typ):
-    return PieceKey(PieceType.MECH, faction_name, structure_typ.value)
+    return PieceKey(PieceType.STRUCTURE, faction_name, structure_typ.value)

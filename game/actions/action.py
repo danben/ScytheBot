@@ -1,6 +1,7 @@
-from game.game_state import *
 from game.exceptions import GameOver
 from game.types import FactionName, ResourceType
+
+import game.state_change as sc
 
 from abc import ABC, abstractmethod
 import attr
@@ -12,6 +13,9 @@ from pyrsistent import pmap
 @attr.s(frozen=True, slots=True)
 class Action(ABC):
     name = attr.ib()
+
+    def __str__(self):
+        return self.name
 
 
 @attr.s(frozen=True, slots=True)
@@ -27,10 +31,7 @@ class StateChange(Action, ABC):
 
 
 @attr.s(frozen=True, slots=True)
-class Choice(Action):
-    def __str__(self):
-        return self.name
-
+class Choice(Action, ABC):
     @abstractmethod
     def choose(self, agent, game_state):
         pass
@@ -59,9 +60,9 @@ class Boolean(Choice):
 
     def do(self, game_state, chosen):
         if chosen:
-            return game_state.push_action(self.action1)
+            return sc.push_action(game_state, self.action1)
         else:
-            return game_state.push_action(self.action2)
+            return sc.push_action(game_state, self.action2)
 
 
 @attr.s(frozen=True, slots=True)
@@ -78,7 +79,7 @@ class Optional(Choice):
     def do(self, game_state, chosen):
         if chosen:
             logging.debug('Lets do it!')
-            return game_state.push_action(self.action)
+            return sc.push_action(game_state, self.action)
         else:
             logging.debug('Decided not to')
             return game_state
@@ -110,15 +111,15 @@ class MaybePayCost(Choice, ABC):
     def do(self, game_state, chosen):
         if chosen:
             # We decided to pay, but because of Crimea we might need to figure out how we're going to pay
-            game_state = game_state.push_action(self.if_paid)
+            game_state = sc.push_action(game_state, self.if_paid)
             cost = self.cost(game_state)
-            if game_state.current_player.faction_name() is not FactionName.CRIMEA or cost.uses_no_resources \
-                    or game_state.current_player.has_no_resources():
+            if sc.get_current_player(game_state).faction_name() is not FactionName.CRIMEA or cost.uses_no_resources \
+                    or sc.get_current_player(game_state).has_no_resources():
                 # Just pay the cost and move on
                 if not cost.is_free():
-                    game_state = game_state.charge_player(game_state.current_player, cost)
+                    game_state = sc.charge_player(game_state, sc.get_current_player(game_state), cost)
             else:
-                game_state = game_state.push_action(CrimeaMaybeChooseResource.new(cost))
+                game_state = sc.push_action(game_state, CrimeaMaybeChooseResource.new(cost))
         else:
             logging.debug('Skipping; decided not to pay')
 
@@ -135,14 +136,16 @@ class SpendAResource(Choice):
         return cls(f'Choose {resource_typ} to spend', player_id, resource_typ)
 
     def choose(self, agent, game_state):
-        eligible_spaces = GameState.controlled_spaces_with_resource(game_state, game_state.get_player(self.player_id),
-                                                                    self.resource_typ)
-        return agent.choose_board_space(game_state, eligible_spaces)
+        eligible_spaces = sc.controlled_spaces_with_resource(game_state,
+                                                             sc.get_player_by_idx(game_state, self.player_id),
+                                                             self.resource_typ)
+        return agent.choose_board_coords(game_state, list(map(lambda x: x.coords, eligible_spaces)))
 
     def do(self, game_state, chosen):
         logging.debug(f'1 from {chosen}')
         board = game_state.board
-        space = chosen.remove_resources(self.resource_typ)
+        space = board.get_space(chosen)
+        space = space.remove_resources(self.resource_typ)
         board = board.set_space(space)
         return attr.evolve(game_state, board=board)
 
@@ -161,13 +164,13 @@ class CrimeaMaybeChooseResource(Choice):
     def do(self, game_state, chosen):
         if chosen:
             new_cost = self.cost.reduce_by_1(chosen)
-            game_state = game_state.charge_player(game_state.current_player, new_cost)
+            game_state = sc.charge_player(game_state, sc.get_current_player(game_state), new_cost)
             current_player, combat_cards =\
-                game_state.current_player.discard_lowest_combat_cards(1, game_state.combat_cards)
+                sc.get_current_player(game_state).discard_lowest_combat_cards(1, game_state.combat_cards)
             game_state = attr.evolve(game_state, combat_cards=combat_cards)
-            game_state = game_state.set_current_player(current_player)
+            game_state = sc.set_player(game_state, current_player)
         else:
-            game_state = game_state.charge_player(game_state.current_player, self.cost)
+            game_state = sc.charge_player(game_state, sc.get_current_player(game_state), self.cost)
         return game_state
 
 
@@ -196,7 +199,7 @@ class Cost:
                    f'{self.combat_cards} combat cards; ' if self.combat_cards else '',
                    f'{self.coins} coins; ' if self.coins else '']
         for resource_typ in ResourceType:
-            strings.append(f'{self.resource_cost[resource_typ]} {resource_typ!r}; '
+            strings.append(f'{self.resource_cost[resource_typ]} {resource_typ}; '
                            if self.resource_cost[resource_typ] else '')
         return ''.join(strings)
 
@@ -232,16 +235,16 @@ class GiveEnlistBenefitsToNeighbors(StateChange):
 
     @classmethod
     def new(cls, bottom_action_typ, enlist_benefit):
-        return cls('Give enlist benefits ({enlist_benefit}) to neighbors', bottom_action_typ, enlist_benefit)
+        return cls(f'Give enlist benefits ({enlist_benefit}) to neighbors', bottom_action_typ, enlist_benefit)
 
     def do(self, game_state):
-        left_player = game_state.get_left_player()
+        left_player = sc.get_left_player(game_state)
         if left_player.has_enlisted(self.bottom_action_typ):
-            game_state = game_state.give_reward_to_player(left_player, self.enlist_benefit, 1)
+            game_state = sc.give_reward_to_player(game_state, left_player, self.enlist_benefit, 1)
 
-        right_player = game_state.get_right_player()
+        right_player = sc.get_right_player(game_state)
         if left_player is not right_player and right_player.has_enlisted(self.bottom_action_typ):
-            game_state = game_state.give_reward_to_player(right_player, self.enlist_benefit, 1)
+            game_state = sc.give_reward_to_player(game_state, right_player, self.enlist_benefit, 1)
 
         return game_state
 
@@ -252,8 +255,6 @@ class BottomActionIfPaid(StateChange):
     coins_payoff = attr.ib()
     enlist_benefit = attr.ib()
     action_benefit = attr.ib()
-    # TODO: This is probably the next thing that I need to make accessible
-    # via the game state
     enlisted = attr.ib(default=False)
 
     @classmethod
@@ -265,23 +266,23 @@ class BottomActionIfPaid(StateChange):
         pass
 
     def do(self, game_state):
-        current_player = game_state.current_player
-        game_state.set_current_player(current_player.add_coins(self.coins_payoff))
+        current_player = sc.get_current_player(game_state)
+        sc.set_player(game_state, current_player.add_coins(self.coins_payoff))
 
-        game_state = game_state.push_action(GiveEnlistBenefitsToNeighbors.new(self.bottom_action_typ,
-                                                                              self.enlist_benefit))
+        game_state = sc.push_action(game_state, GiveEnlistBenefitsToNeighbors.new(self.bottom_action_typ,
+                                                                                  self.enlist_benefit))
         game_over = False
         try:
             if self.enlisted:
-                game_state = game_state.give_reward_to_player(current_player, self.enlist_benefit, 1)
+                game_state = sc.give_reward_to_player(game_state, current_player, self.enlist_benefit, 1)
         except GameOver as e:
             game_over = True
-            game_state = game_state.set_player(e.player)
+            game_state = sc.set_player(game_state, e.player)
         finally:
             if game_over:
-                game_state = game_state.push_action(EndGame.new())
-            if current_player.can_legally_receive_action_benefit(self.bottom_action_typ):
-                game_state = game_state.push_action(Optional.new(self.action_benefit))
+                game_state = sc.push_action(game_state, EndGame.new())
+            if sc.can_legally_receive_action_benefit(game_state, current_player, self.bottom_action_typ):
+                game_state = sc.push_action(game_state, Optional.new(self.action_benefit))
             else:
                 logging.debug(f'Cannot receive benefit from action {self.bottom_action_typ} so skipping')
         return game_state
@@ -299,9 +300,6 @@ class BottomAction(MaybePayCost):
             action_benefit):
         if_paid = BottomActionIfPaid.new(bottom_action_typ, coins_payoff, enlist_benefit, action_benefit)
         return cls(bottom_action_typ.__str__(), if_paid, maxcost, mincost, resource_type, bottom_action_typ)
-
-    def __str__(self):
-        return self.bottom_action_typ.__repr__()
 
     def cost(self, game_state):
         return Cost.of_resource_type(self.resource_type, self.current_cost)
@@ -330,7 +328,7 @@ class ReceiveBenefit(StateChange):
         return cls('Current player gets {amt} {typ}', typ, amt)
 
     def do(self, game_state):
-        return game_state.give_reward_to_player(game_state.current_player, self.typ, self.amt)
+        return sc.give_reward_to_player(game_state, sc.get_current_player(game_state), self.typ, self.amt)
 
     @staticmethod
     def optional(typ, amt):
@@ -349,7 +347,7 @@ class ReceiveResources(StateChange):
         return cls(f'Receive {amt} {typ} on space {coords}', typ, amt, coords)
 
     def do(self, game_state):
-        game_state = game_state.add_resources_to_space(self.coords, self.typ, self.amt)
+        game_state = sc.add_resources_to_space(game_state, self.coords, self.typ, self.amt)
         if self.is_produce:
             game_state = attr.evolve(game_state,
                                      spaces_produced_this_turn=game_state.spaces_produced_this_turn.add(self.coords))
@@ -366,8 +364,6 @@ class ReceiveWorkers(StateChange):
         return cls(f'Receive {amt} workers on space {coords}', amt, coords)
 
     def do(self, game_state):
-        game_state = GameState.add_workers(game_state, game_state.current_player, self.coords, self.amt)
-        game_state = \
-            game_state.set_player(game_state.current_player.remove_meeples_from_produce_space(self.amt))
+        game_state = sc.add_workers(game_state, sc.get_current_player(game_state), self.coords, self.amt)
         return attr.evolve(game_state,
                            spaces_produced_this_turn=game_state.spaces_produced_this_turn.add(self.coords))

@@ -1,5 +1,6 @@
 from game.agents import Agent
-from game.types import ResourceType
+from game.types import ResourceType, StructureType
+import game.state_change as sc
 
 import logging
 import numpy as np
@@ -23,8 +24,8 @@ class RandomAgent(Agent):
         logging.debug(f'Choosing between {low} and {high}')
         return np.random.randint(low, high+1)
 
-    def choose_board_space(self, game_state, board_spaces):
-        return np.random.choice(board_spaces)
+    def choose_board_coords(self, game_state, board_coords):
+        return board_coords[np.random.randint(len(board_coords))]
 
     def choose_piece(self, game_state, pieces):
         return np.random.choice(pieces)
@@ -35,23 +36,22 @@ class RandomAgent(Agent):
     def choose_resource_type(self, game_state):
         return np.random.choice([r for r in ResourceType])
 
-    def choose_bottom_action(self, game_state, bottom_actions):
-        return np.random.choice(bottom_actions)
+    def choose_bottom_action_type(self, game_state, bottom_action_types):
+        return np.random.choice(bottom_action_types)
 
     def choose_enlist_reward(self, game_state):
-        return np.random.choice([enlist_reward for enlist_reward in
-                                 game_state.current_player.available_enlist_rewards()])
+        return np.random.choice(sc.get_current_player(game_state).available_enlist_rewards())
 
-    def choose_mech_to_deploy(self, game_state):
-        return np.random.choice([mech for mech in game_state.current_player.undeployed_mechs()])
+    def choose_mech_type_to_deploy(self, game_state):
+        return np.random.choice(sc.get_current_player(game_state).undeployed_mech_types())
 
     def choose_structure_to_build(self, game_state):
-        return np.random.choice([top_action for top_action in
-                                 game_state.current_player.top_actions_with_unbuilt_structures()])
+        choices = sc.get_current_player(game_state).top_action_types_with_unbuilt_structures()
+        return StructureType.of_top_action_typ(np.random.choice([top_action_type for top_action_type in choices]))
 
     def choose_cube_space_to_upgrade(self, game_state):
-        cube_spaces = game_state.current_player.cube_spaces_not_fully_upgraded()
+        cube_spaces = sc.get_current_player(game_state).cube_spaces_not_fully_upgraded()
         return cube_spaces[np.random.choice(len(cube_spaces))]
 
     def choose_optional_combat_card(self, game_state):
-        return game_state.current_player.random_combat_card(optional=True)
+        return sc.get_current_player(game_state).random_combat_card(optional=True)

@@ -1,6 +1,11 @@
-from game.actions import Bolster, Build, Deploy, enlist, Produce, Trade, upgrade
-from game.actions.movegain import MoveGain
-
+import game.actions.bolster as bolster
+import game.actions.build as build
+import game.actions.deploy as deploy
+import game.actions.enlist as enlist
+import game.actions.movegain as movegain
+import game.actions.produce as produce
+import game.actions.trade as trade
+import game.actions.upgrade as upgrade
 from game.types import BottomActionType, PlayerMatName, StructureType, TopActionType
 
 import attr
@@ -21,31 +26,36 @@ _starting_money = {PlayerMatName.INDUSTRIAL: 4,
                    PlayerMatName.MECHANICAL: 6,
                    PlayerMatName.AGRICULTURAL: 7}
 
+_bolster = bolster.Bolster.new()
+_produce = produce.Produce.new()
+_movegain = movegain.action()
+_trade = trade.Trade.new()
+
 _action_spaces = {PlayerMatName.INDUSTRIAL:
-                  pvector([(Bolster(), upgrade(maxcost=3, mincost=2, payoff=3)),
-                           (Produce(), Deploy(maxcost=3, mincost=1, payoff=2)),
-                           (MoveGain(), Build(maxcost=3, mincost=2, payoff=1)),
-                           (Trade(), enlist(maxcost=4, mincost=2, payoff=0))]),
+                  pvector([(_bolster, upgrade.action(maxcost=3, mincost=2, payoff=3)),
+                           (_produce, deploy.action(maxcost=3, mincost=1, payoff=2)),
+                           (_movegain, build.action(maxcost=3, mincost=2, payoff=1)),
+                           (_trade, enlist.action(maxcost=4, mincost=2, payoff=0))]),
                   PlayerMatName.ENGINEERING:
-                  pvector([(Produce(), upgrade(maxcost=3, mincost=2, payoff=2)),
-                           (Trade(), Deploy(maxcost=4, mincost=2, payoff=0)),
-                           (Bolster(), Build(maxcost=3, mincost=1, payoff=3)),
-                           (MoveGain(), enlist(maxcost=3, mincost=2, payoff=1))]),
+                  pvector([(_produce, upgrade.action(maxcost=3, mincost=2, payoff=2)),
+                           (_trade, deploy.action(maxcost=4, mincost=2, payoff=0)),
+                           (_bolster, build.action(maxcost=3, mincost=1, payoff=3)),
+                           (_movegain, enlist.action(maxcost=3, mincost=2, payoff=1))]),
                   PlayerMatName.PATRIOTIC:
-                  pvector([(MoveGain(), upgrade(maxcost=2, mincost=2, payoff=1)),
-                           (Bolster(), Deploy(maxcost=4, mincost=1, payoff=3)),
-                           (Trade(), Build(maxcost=4, mincost=2, payoff=0)),
-                           (Produce(), enlist(maxcost=3, mincost=2, payoff=2))]),
+                  pvector([(_movegain, upgrade.action(maxcost=2, mincost=2, payoff=1)),
+                           (_bolster, deploy.action(maxcost=4, mincost=1, payoff=3)),
+                           (_trade, build.action(maxcost=4, mincost=2, payoff=0)),
+                           (_produce, enlist.action(maxcost=3, mincost=2, payoff=2))]),
                   PlayerMatName.MECHANICAL:
-                  pvector([(Trade(), upgrade(maxcost=3, mincost=2, payoff=0)),
-                           (Bolster(), Deploy(maxcost=3, mincost=1, payoff=2)),
-                           (MoveGain(), Build(maxcost=3, mincost=2, payoff=2)),
-                           (Produce(), enlist(maxcost=4, mincost=2, payoff=2))]),
+                  pvector([(_trade, upgrade.action(maxcost=3, mincost=2, payoff=0)),
+                           (_bolster, deploy.action(maxcost=3, mincost=1, payoff=2)),
+                           (_movegain, build.action(maxcost=3, mincost=2, payoff=2)),
+                           (_produce, enlist.action(maxcost=4, mincost=2, payoff=2))]),
                   PlayerMatName.AGRICULTURAL:
-                  pvector([(MoveGain(), upgrade(maxcost=2, mincost=2, payoff=1)),
-                           (Trade(), Deploy(maxcost=4, mincost=2, payoff=0)),
-                           (Produce(), Build(maxcost=4, mincost=2, payoff=2)),
-                           (Bolster(), enlist(maxcost=3, mincost=1, payoff=3))])}
+                  pvector([(_movegain, upgrade.action(maxcost=2, mincost=2, payoff=1)),
+                           (_trade, deploy.action(maxcost=4, mincost=2, payoff=0)),
+                           (_produce, build.action(maxcost=4, mincost=2, payoff=2)),
+                           (_bolster, enlist.action(maxcost=3, mincost=1, payoff=3))])}
 
 
 @attr.s(frozen=True, slots=True)
@@ -97,7 +107,7 @@ class PlayerMat:
                    bottom_spaces_by_bottom_action_typ)
 
     def move_pawn_to(self, i):
-        logging.debug(f'Space chosen: {self.action_spaces[i]!r}')
+        logging.debug(f'Space chosen: {self.action_spaces[i][0]} / {self.action_spaces[i][1]}')
         return attr.evolve(self, last_action_spot_taken=i)
 
     @staticmethod

@@ -12,7 +12,7 @@ ALL_RIVERS = {((0, 3), (1, 3)), ((0, 3), (0, 4)), ((0, 4), (1, 3)), ((0, 5), (0,
               ((3, 0), (4, 0)), ((3, 0), (4, 1)), ((3, 1), (4, 1)), ((3, 1), (4, 2)), ((3, 4), (3, 5)),
               ((3, 5), (4, 5)), ((4, 0), (5, 0)), ((4, 1), (5, 0)), ((4, 1), (5, 1)), ((4, 2), (5, 1)),
               ((5, 1), (5, 2)), ((5, 2), (6, 3)), ((5, 3), (6, 3)), ((5, 3), (6, 4)), ((5, 4), (6, 4)),
-              ((6, 4), (6, 5))}
+              ((6, 4), (6, 5)), ((-1, FactionName.RUSVIET.value), (1, 6))}
 
 
 def blocked_by_river(from_coords, to_coords):
@@ -28,8 +28,8 @@ def blocked_by_river(from_coords, to_coords):
 class BoardSpace:
     coords = attr.ib()
     terrain_typ = attr.ib()
-    _has_encounter = attr.ib(default=False)
-    _has_tunnel = attr.ib(default=False)
+    has_encounter = attr.ib()
+    _has_tunnel = attr.ib()
     character_keys = attr.ib(default=pset())
     mech_keys = attr.ib(default=pset())
     worker_keys = attr.ib(default=pset())
@@ -40,9 +40,9 @@ class BoardSpace:
 
     def __str__(self):
         if self.coords:
-            return f'{self.terrain_typ!r} : {self.coords}'
+            return f'{self.terrain_typ} : {self.coords}'
         else:
-            return f'{self.terrain_typ!r}'
+            return f'{self.terrain_typ}'
 
     # def to_string(self):
     #     return f'{self!r}, controlled by {self.controller()!r}\nResources: {self.resources}' \
@@ -51,9 +51,9 @@ class BoardSpace:
     def combat_factions(self):
         factions = set()
         for character_key in self.character_keys:
-            factions.add(character_key[1])
+            factions.add(character_key.faction_name)
         for mech_key in self.mech_keys:
-            factions.add(mech_key[1])
+            factions.add(mech_key.faction_name)
         if len(factions) > 1:
             assert len(factions) == 2
             return plist(factions)
@@ -86,7 +86,7 @@ class BoardSpace:
 
     def has_tunnel(self, faction_name=None):
         return self._has_tunnel or \
-               (faction_name and self.structure and self.structure.structure_typ is StructureType.MINE
+               (faction_name and self.structure and self.structure.id == StructureType.MINE.value
                 and self.structure.faction_name is faction_name)
 
     def has_structure(self):
@@ -105,16 +105,12 @@ class BoardSpace:
 
     def remove_resources(self, resource_typ, amt=1):
         assert self.resources[resource_typ] >= amt
-        logging.debug(f'{amt} {resource_typ!r} removed from {self!r}')
+        logging.debug(f'{amt} {resource_typ} removed from {self}')
         new_resources = self.resources[resource_typ] - amt
         return attr.evolve(self, resources=self.resources.set(resource_typ, new_resources))
 
     def is_home_base(self):
         return self.terrain_typ is TerrainType.HOME_BASE
-
-    def set_structure(self, structure_key):
-        assert self.structure is None
-        return attr.evolve(self, structure=structure_key)
 
     def add_piece(self, key):
         if key.piece_typ is PieceType.CHARACTER:
@@ -169,11 +165,11 @@ def _forest(coords, has_encounter=False, has_tunnel=False):
 
 
 def _lake(coords):
-    return BoardSpace(coords, TerrainType.LAKE)
+    return BoardSpace(coords, TerrainType.LAKE, False, False)
 
 
 def _factory(coords):
-    return BoardSpace(coords, TerrainType.FACTORY)
+    return BoardSpace(coords, TerrainType.FACTORY, False, False)
 
 
 @attr.s(frozen=True, slots=True)
@@ -182,9 +178,10 @@ class HomeBase(BoardSpace):
 
 
 def _home_base(faction_name, is_active):
-    return HomeBase((-1, faction_name.value), TerrainType.HOME_BASE, is_active=is_active)
+    return HomeBase((-1, faction_name.value), TerrainType.HOME_BASE, False, False, is_active=is_active)
 
 
+# TODO: Get rid of the explicit coordinate pairs
 _board_spaces = [
     [None, _mountain((0, 1)), _farm((0, 2)), _village((0, 3), has_encounter=True), _forest((0, 4)), _tundra((0, 5)),
      _village((0, 6))],
@@ -192,8 +189,8 @@ _board_spaces = [
      _mountain((1, 4), has_encounter=True), _farm((1, 5)), _farm((1, 6), has_encounter=True)],
     [None, _forest((2, 1)), _mountain((2, 2), has_tunnel=True), _forest((2, 3)), _lake((2, 4)),
      _forest((2, 5), has_tunnel=True), _village((2, 6))],
-    [_farm((3, 0)), _village((3, 1)), _lake((3, 2)), _factory((3, 3)), _mountain((3, 4)), _tundra((3, 5),
-     has_encounter=True), _mountain((3, 6))],
+    [_farm((3, 0)), _village((3, 1)), _lake((3, 2)), _factory(constants.FACTORY_COORDS), _mountain((3, 4)),
+     _tundra((3, 5), has_encounter=True), _mountain((3, 6))],
     [_forest((4, 0), has_encounter=True), _forest((4, 1)), _farm((4, 2), has_tunnel=True), _tundra((4, 3)),
      _lake((4, 4)), _village((4, 5), has_tunnel=True), _lake((4, 6))],
     [_mountain((5, 0)), _village((5, 1), has_encounter=True), _village((5, 2), has_encounter=True),
@@ -212,7 +209,7 @@ def _board_adjacencies(row, col):
         adj = [(row, col+1), (row, col-1), (row-1, col), (row-1, col-1), (row+1, col), (row+1, col-1)]
     else:
         adj = [(row, col+1), (row, col-1), (row-1, col), (row-1, col+1), (row+1, col), (row+1, col+1)]
-    return filter(lambda x: on_the_board(*x), adj)
+    return list(filter(lambda x: on_the_board(*x), adj))
 
 
 def move_down_and_right(row, col):
@@ -269,6 +266,7 @@ class Board:
                             if space is not tunnel_space:
                                 adjacent_spaces.append(tunnel_space.coords)
                     base_adjacencies[space.coords] = adjacent_spaces
+
         for faction_name, home_base in home_bases.items():
             adjacent_spaces = _home_base_adjacencies[faction_name]
             base_adjacencies[home_base.coords] = adjacent_spaces
@@ -286,7 +284,7 @@ class Board:
             elif space.terrain_typ is TerrainType.HOME_BASE:
                 assert len(adjacencies_accounting_for_rivers_and_lakes[space.coords]) == 2
 
-        home_bases = pmap({faction_name: home_base.coords for faction_name, home_base in home_bases.values()})
+        home_bases = pmap({faction_name: home_base.coords for faction_name, home_base in home_bases.items()})
 
         return cls(home_bases, pmap(board_spaces_by_coords), pmap(base_adjacencies),
                    pmap(adjacencies_accounting_for_rivers_and_lakes))
@@ -294,15 +292,16 @@ class Board:
     def __str__(self):
         s = []
         for space in self.board_spaces_by_coords.values():
-            if space.all_pieces():
+            if space.all_piece_keys():
                 s.append(space.to_string())
         return '; '.join(s)
 
     def invariant(self, game_state):
         for space in self.board_spaces_by_coords.values():
-            for piece_key in space.all_pieces():
-                if game_state.pieces_by_key[piece_key].board_coords != space.coords:
-                    raise Exception(f'{piece_key} on {space}')
+            for piece_key in space.all_piece_keys():
+                piece_coords = game_state.pieces_by_key[piece_key].board_coords
+                if piece_coords != space.coords:
+                    raise Exception(f'{piece_key} on {space} but thinks it is on {piece_coords}')
 
     def get_space(self, coords):
         return self.board_spaces_by_coords[coords]
@@ -310,10 +309,14 @@ class Board:
     def set_space(self, space):
         return attr.evolve(self, board_spaces_by_coords=self.board_spaces_by_coords.set(space.coords, space))
 
+    def add_piece(self, key, coords):
+        space = self.get_space(coords).add_piece(key)
+        return attr.evolve(self, board_spaces_by_coords=self.board_spaces_by_coords.set(coords, space))
+
     def is_blocked_by_river(self, from_space, to_space):
         return blocked_by_river(from_space.coords, to_space.coords) \
                or (from_space.coords == self.board_spaces_by_coords(-1, FactionName.RUSVIET.value)
                    and to_space.terrain_typ is TerrainType.FARM)
 
     def home_base(self, faction_name):
-        return self.board_spaces_by_coords(-1, faction_name.value)
+        return self.board_spaces_by_coords[(-1, faction_name.value)]

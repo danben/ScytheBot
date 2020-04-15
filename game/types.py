@@ -1,4 +1,3 @@
-import game.components.piece as piece
 import game.constants as constants
 
 from enum import Enum
@@ -101,16 +100,6 @@ class PieceType(Enum):
 
         assert False
 
-    def ctor(self):
-        if self is PieceType.WORKER:
-            return piece.Worker
-        elif self is PieceType.MECH:
-            return piece.Mech
-        elif self is PieceType.CHARACTER:
-            return piece.Character
-
-        assert False
-
 
 class MechType(Enum):
     RIVERWALK = 0
@@ -134,6 +123,31 @@ class StructureType(Enum):
             return "mine"
         elif self is StructureType.ARMORY:
             return "armory"
+
+        assert False
+
+    @staticmethod
+    def of_top_action_typ(top_action_typ):
+        if top_action_typ is TopActionType.MOVEGAIN:
+            return StructureType.MINE
+        elif top_action_typ is TopActionType.PRODUCE:
+            return StructureType.MILL
+        elif top_action_typ is TopActionType.BOLSTER:
+            return StructureType.MONUMENT
+        elif top_action_typ is TopActionType.TRADE:
+            return StructureType.ARMORY
+
+        assert False
+
+    def to_top_action_typ(self):
+        if self is StructureType.MINE:
+            return TopActionType.MOVEGAIN
+        elif self is StructureType.MILL:
+            return TopActionType.PRODUCE
+        elif self is StructureType.MONUMENT:
+            return TopActionType.BOLSTER
+        elif self is StructureType.ARMORY:
+            return TopActionType.TRADE
 
         assert False
 
@@ -177,6 +191,7 @@ class ResourceType(Enum):
             return "food"
 
         assert False
+
 
 class StarType(Enum):
     UPGRADE = 1
@@ -231,6 +246,9 @@ class TerrainType(Enum):
             return ResourceType.FOOD
         elif self is TerrainType.FOREST:
             return ResourceType.WOOD
+
+        else:
+            raise Exception(f'Illegal: asking for resource type of {self}')
 
     def __str__(self):
         if self is TerrainType.MOUNTAIN:

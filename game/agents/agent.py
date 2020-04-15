@@ -18,7 +18,7 @@ class Agent(ABC):
         pass
 
     @abstractmethod
-    def choose_board_space(self, game_state, board_spaces):
+    def choose_board_coords(self, game_state, board_coords):
         pass
 
     @abstractmethod
@@ -34,7 +34,7 @@ class Agent(ABC):
         pass
 
     @abstractmethod
-    def choose_bottom_action(self, game_state, bottom_actions):
+    def choose_bottom_action_type(self, game_state, bottom_action_types):
         pass
 
     @abstractmethod
@@ -42,7 +42,7 @@ class Agent(ABC):
         pass
 
     @abstractmethod
-    def choose_mech_to_deploy(self, game_state):
+    def choose_mech_type_to_deploy(self, game_state):
         pass
 
     @abstractmethod

@@ -7,11 +7,12 @@ from enum import Enum
 import random
 
 
-def score_adjacent(board, spaces, num_spaces_to_coins):
+def score_adjacent(board, coords, num_spaces_to_coins):
     scores = defaultdict(int)
-    for space in spaces:
+    for c in coords:
         marked = defaultdict(bool)
-        for other_space in board.base_adjacencies[space]:
+        for other_coords in board.base_adjacencies[c]:
+            other_space = board.get_space(other_coords)
             if other_space.structure and not marked[other_space.structure.faction_name]:
                 scores[other_space.structure.faction_name] += 1
                 marked[other_space.structure.faction_name] = True
@@ -41,7 +42,12 @@ def score_next_to_tunnels(board):
         else:
             return 0
 
-    tunnel_spaces = [space for space in board.base_adjacencies.keys() if space.has_tunnel()]
+    tunnel_spaces = []
+    for coords in board.base_adjacencies.keys():
+        space = board.get_space(coords)
+        if space.has_tunnel():
+            tunnel_spaces.append(coords)
+
     return score_adjacent(board, tunnel_spaces, num_spaces_to_coins)
 
 
@@ -58,7 +64,11 @@ def score_next_to_lakes(board):
         else:
             return 0
 
-    lake_spaces = [space for space in board.base_adjacencies.keys() if space.terrain_typ is TerrainType.LAKE]
+    lake_spaces = []
+    for coords in board.base_adjacencies.keys():
+        space = board.get_space(coords)
+        if space.terrain_typ is TerrainType.LAKE:
+            lake_spaces.append(coords)
     return score_adjacent(board, lake_spaces, num_spaces_to_coins)
 
 
@@ -75,7 +85,7 @@ def score_next_to_encounters(board):
         else:
             return 0
 
-    encounter_spaces = [space for space in board.base_adjacencies.keys() if space.has_encounter]
+    encounter_spaces = [coords for coords in board.base_adjacencies.keys() if board.get_space(coords).has_encounter]
     return score_adjacent(board, encounter_spaces, num_spaces_to_coins)
 
 
@@ -90,7 +100,11 @@ def score_on_tunnels(board):
         else:
             return 0
 
-    tunnel_spaces = [space for space in board.base_adjacencies.keys() if space.has_tunnel()]
+    tunnel_spaces = []
+    for coords in board.base_adjacencies.keys():
+        space = board.get_space(coords)
+        if space._has_tunnel:
+            tunnel_spaces.append(space)
     return score_on_top_of(tunnel_spaces, num_spaces_to_coins)
 
 
@@ -101,17 +115,21 @@ def score_longest_row_of_structures(board):
         count = 0
         while space and space.structure and space.structure.faction_name is faction:
             count += 1
-            next_r, next_c = move(r, c)
-            space = board.all_spaces_except_home_bases[next_r][next_c] if bd.on_the_board(next_r, next_c) else None
+            next_r, next_c = move(*space.coords)
+            if bd.on_the_board(next_r, next_c) and (next_r, next_c) in board.board_spaces_by_coords:
+                space = board.board_spaces_by_coords[(next_r, next_c)]
+            else:
+                space = None
         return count
 
-        for space in board.base_adjacencies.keys():
-            if space and space.structure and space.terrain_typ is not TerrainType.HOME_BASE:
-                faction = space.structure.faction_name
-                count_down_right = count_in_a_line(space, faction, bd.move_down_and_right)
-                count_up_right = count_in_a_line(space, faction, bd.move_up_and_right)
-                player_scores[faction] = max(player_scores[faction], count_down_right)
-                player_scores[faction] = max(player_scores[faction], count_up_right)
+    for coords in board.base_adjacencies.keys():
+        space = board.get_space(coords)
+        if space and space.structure and space.terrain_typ is not TerrainType.HOME_BASE:
+            faction = space.structure.faction_name
+            count_down_right = count_in_a_line(space, faction, bd.move_down_and_right)
+            count_up_right = count_in_a_line(space, faction, bd.move_up_and_right)
+            player_scores[faction] = max(player_scores[faction], count_down_right)
+            player_scores[faction] = max(player_scores[faction], count_up_right)
 
     def length_to_coins(length):
         assert 0 <= length <= 4
@@ -134,8 +152,12 @@ def score_farms_or_tundras_with_structures(board):
         else:
             return 0
 
-    farms_and_tundras = [space for space in board.base_adjacencies.keys()
-                         if space.terrain_typ is TerrainType.FARM or space.terrain_typ is TerrainType.TUNDRA]
+    farms_and_tundras = []
+    for coords in board.base_adjacencies.keys():
+        space = board.get_space(coords)
+        if space.terrain_typ is TerrainType.FARM or space.terrain_typ is TerrainType.TUNDRA:
+            farms_and_tundras.append(space)
+
     return score_on_top_of(farms_and_tundras, num_spaces_to_coins)
 
 

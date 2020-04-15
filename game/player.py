@@ -1,8 +1,9 @@
+import game.components.player_mat as gc_player_mat
+import game.state_change as sc
 from game import constants
-from game.types import Benefit, BottomActionType, FactionName, MechType, PieceType, ResourceType, StarType,\
-    TerrainType
-from game.components.player_mat import PlayerMat
+from game.types import Benefit, FactionName, MechType, PieceType, StarType, TerrainType
 from game.exceptions import GameOver
+from game.components.piece import PieceKey
 
 import attr
 import logging
@@ -30,12 +31,14 @@ class Stars:
 
     def achieve(self, typ):
         if self.achieved[typ] < self.limits[typ]:
-            logging.debug(f'Star achieved: {typ!r}')
+            logging.debug(f'Star achieved: {typ}')
             assert self.count < 6
             player = attr.evolve(self, count=self.count+1, achieved=self.achieved.set(typ, self.achieved[typ]+1))
             if player.count == 6:
                 raise GameOver(player)
             return player
+        else:
+            return self
 
     def __str__(self):
         return self.achieved.__str__()
@@ -60,16 +63,16 @@ class Player:
     stars = attr.ib()
     home_base = attr.ib()
     adjacencies = attr.ib()
-    workers = attr.ib(default=pset())
+    worker_ids = attr.ib(default=pset())
     enlist_rewards = attr.ib(default=pmap({benefit: False for benefit in Benefit}))
-    mechs = attr.ib(default=pset())
+    mech_ids = attr.ib(default=pset())
     structures = attr.ib(default=pset())
 
     @classmethod
-    def new(cls, id, faction, player_mat_name, board, starting_combat_cards):
-        player_mat = PlayerMat.from_player_mat_name(player_mat_name)
-        coins = player_mat.starting_money()
-        popularity = player_mat.starting_popularity()
+    def new(cls, player_id, faction, player_mat_name, board, starting_combat_cards):
+        player_mat = gc_player_mat.PlayerMat.from_player_mat_name(player_mat_name)
+        coins = player_mat.starting_money
+        popularity = player_mat.starting_popularity
         power = faction.starting_power
         combat_cards = combat_cards_dict(starting_combat_cards)
         stars = Stars.from_faction_name(faction.name)
@@ -78,16 +81,24 @@ class Player:
                             PieceType.MECH: board.adjacencies_accounting_for_rivers_and_lakes,
                             PieceType.WORKER: board.adjacencies_accounting_for_rivers_and_lakes})
         adjacencies = faction.add_faction_specific_adjacencies(adjacencies, board.base_adjacencies)
-        return cls(id, faction, player_mat, coins, popularity, power, combat_cards, stars, home_base,
+        return cls(player_id, faction, player_mat, coins, popularity, power, combat_cards, stars, home_base,
                    adjacencies)
 
     def __str__(self):
         return f'{self.faction.name} / {self.player_mat.name}'
 
-    def invariant(self):
+    def invariant(self, game_state):
         for adj in self.adjacencies[PieceType.WORKER].values():
             for s in adj:
-                assert s.terrain_typ is not TerrainType.HOME_BASE
+                space = game_state.board.get_space(s)
+                assert space.terrain_typ is not TerrainType.HOME_BASE
+        for worker_id in self.worker_ids:
+            worker_key = PieceKey(PieceType.WORKER, self.faction_name(), worker_id)
+            assert worker_key in game_state.pieces_by_key
+        # TODO: turn self.mechs into self.mech_ids
+        for mech_id in self.mech_ids:
+            mech_key = PieceKey(PieceType.MECH, self.faction_name(), mech_id)
+            assert mech_key in game_state.pieces_by_key
 
     # def resources_string(self, board):
     #     return ''.join([f'{r} : {self.available_resources(r, board)}; ' for r in ResourceType])
@@ -104,26 +115,26 @@ class Player:
         # f'Controlled resources: {self.resources_string()}\n'
 
     def log(self, msg):
-        logging.debug(f'{self!r} : {msg}')
+        logging.debug(f'{self} : {msg}')
 
-    # def score(self, board):
-    #     star_score, territory_score, resource_pair_score = 3, 2, 1
-    #     if self.popularity > 6:
-    #         star_score += 1
-    #         territory_score += 1
-    #         resource_pair_score += 1
-    #     if self.popularity > 12:
-    #         star_score += 1
-    #         territory_score += 1
-    #         resource_pair_score += 1
-    #     return star_score * self.stars.count + territory_score * GameState.territory_count(game_state, self) \
-    #         + resource_pair_score * self.resource_pair_count(board) + self.coins
+    def score(self, game_state):
+        star_score, territory_score, resource_pair_score = 3, 2, 1
+        if self.popularity > 6:
+            star_score += 1
+            territory_score += 1
+            resource_pair_score += 1
+        if self.popularity > 12:
+            star_score += 1
+            territory_score += 1
+            resource_pair_score += 1
+        return star_score * self.stars.count + territory_score * sc.territory_count(game_state, self) \
+            + resource_pair_score * sc.resource_pair_count(game_state, self) + self.coins
 
     def faction_name(self):
         return self.faction.name
 
     def add_power(self, power):
-        logging.debug(f'{self!r} receives {power} power')
+        logging.debug(f'{self} receives {power} power')
         new_power = min(self.power + power, constants.MAX_POWER)
         ret = attr.evolve(self, power=new_power)
         if new_power == constants.MAX_POWER:
@@ -134,22 +145,22 @@ class Player:
         return attr.evolve(self, power=max(self.power - power, 0))
 
     def add_coins(self, coins):
-        logging.debug(f'{self!r} receives {coins} coins')
+        logging.debug(f'{self} receives {coins} coins')
         return attr.evolve(self, coins=self.coins+coins)
 
     def remove_coins(self, coins):
-        logging.debug(f'{self!r} loses {coins} coins')
+        logging.debug(f'{self} loses {coins} coins')
         return attr.evolve(self, coins=max(self.coins - coins, 0))
 
     def add_popularity(self, popularity):
-        logging.debug(f'{self!r} receives {popularity} popularity')
+        logging.debug(f'{self} receives {popularity} popularity')
         ret = attr.evolve(self, popularity=min(self.popularity + popularity, constants.MAX_POPULARITY))
         if ret.popularity == constants.MAX_POPULARITY:
             ret = attr.evolve(ret, stars=ret.stars.achieve(StarType.POPULARITY))
         return ret
 
     def remove_popularity(self, popularity):
-        logging.debug(f'{self!r} loses {popularity} popularity')
+        logging.debug(f'{self} loses {popularity} popularity')
         return attr.evolve(self, popularity=max(self.popularity - popularity, 0))
 
     def total_combat_cards(self):
@@ -159,7 +170,7 @@ class Player:
         return [i for i in range(constants.MIN_COMBAT_CARD, constants.MAX_COMBAT_CARD + 1) if self.combat_cards[i]]
 
     def add_combat_cards(self, cards):
-        logging.debug(f'{self!r} receives {len(cards)} combat cards')
+        logging.debug(f'{self} receives {len(cards)} combat cards')
         combat_cards = thaw(self.combat_cards)
         for card in cards:
             combat_cards[card] += 1
@@ -167,11 +178,10 @@ class Player:
 
     def discard_combat_card(self, card_value, combat_card_deck):
         assert self.combat_cards[card_value]
-        logging.debug(f'{self!r} discards a combat card with value {card_value}')
+        logging.debug(f'{self} discards a combat card with value {card_value}')
         combat_cards = self.combat_cards.set(card_value, self.combat_cards[card_value] - 1)
         return attr.evolve(self, combat_cards=combat_cards), combat_card_deck.discard(card_value)
 
-    # TODO: this is kind of weird. Maybe take care of adding them to the deck in the caller?
     def discard_lowest_combat_cards(self, num_cards, combat_card_deck):
         lowest = constants.MIN_COMBAT_CARD
         ret = self
@@ -197,7 +207,7 @@ class Player:
         return np.random.choice(all_combat_card_values, p=proportions)
 
     def remove_random_combat_card(self):
-        logging.debug(f'{self!r} loses a random combat card')
+        logging.debug(f'{self} loses a random combat card')
         card = self.random_combat_card()
         if card:
             attr.evolve(self, combat_cards=self.combat_cards.set(card, self.combat_cards.get(card)-1)), card
@@ -205,21 +215,21 @@ class Player:
             return self, None
 
     def available_workers(self):
-        return constants.NUM_WORKERS - len(self.workers)
+        return constants.NUM_WORKERS - len(self.worker_ids)
 
     def _add_worker(self, worker_id):
-        assert len(self.workers) < constants.NUM_WORKERS and worker_id not in self.workers
-        workers = self.workers.add(worker_id)
-        if len(workers) == constants.NUM_WORKERS:
+        assert len(self.worker_ids) < constants.NUM_WORKERS and worker_id not in self.worker_ids
+        worker_ids = self.worker_ids.add(worker_id)
+        if len(worker_ids) == constants.NUM_WORKERS:
             stars = self.stars.achieve(StarType.WORKER)
         else:
             stars = self.stars
-        return attr.evolve(self, workers=workers, stars=stars)
+        return attr.evolve(self, worker_ids=worker_ids, stars=stars)
 
     def add_workers(self, ids):
         ret = self
-        for id in ids:
-            ret = ret._add_worker(id)
+        for piece_id in ids:
+            ret = ret._add_worker(piece_id)
         return ret
 
     def can_upgrade(self):
@@ -243,7 +253,7 @@ class Player:
         return not all(self.enlist_rewards.values())
 
     def mark_enlist_benefit(self, enlist_benefit):
-        logging.debug(f'{self!r} takes enlist benefit {enlist_benefit!r}')
+        logging.debug(f'{self} takes enlist benefit {enlist_benefit}')
         enlist_rewards = self.enlist_rewards.set(enlist_benefit, True)
         if self.can_enlist():
             stars = self.stars
@@ -267,33 +277,21 @@ class Player:
     def structure_is_built(self, top_action_typ):
         return self.player_mat.top_action_cubes_and_structures_by_top_action_typ[top_action_typ].structure_is_built
 
-    def can_build(self):
+    def has_unbuilt_structures(self):
         return len(self.structures) < constants.NUM_STRUCTURES
 
-    def can_deploy(self):
-        return len(self.mechs) < constants.NUM_MECHS
+    def undeployed_mech_types(self):
+        return [i for i in MechType if i.value not in self.mech_ids]
 
-    def undeployed_mechs(self):
-        return [i for i, key in enumerate(self.mechs) if not key]
+    def has_undeployed_mechs(self):
+        return len(self.mech_ids) < constants.NUM_MECHS
 
     def base_move_for_piece_type(self, piece_typ):
         if piece_typ is PieceType.WORKER:
             return 1
         elif piece_typ is PieceType.CHARACTER or piece_typ is PieceType.MECH:
-            return 2 if self.mechs[MechType.SPEED] else 1
+            return 2 if MechType.SPEED.value in self.mech_ids else 1
         assert False
-
-    def can_legally_receive_action_benefit(self, bottom_action_typ):
-        if bottom_action_typ is BottomActionType.ENLIST:
-            return self.can_enlist()
-        elif bottom_action_typ is BottomActionType.DEPLOY:
-            return self.can_deploy()
-        elif bottom_action_typ is BottomActionType.BUILD:
-            return self.can_build()
-        elif bottom_action_typ is BottomActionType.UPGRADE:
-            return self.can_upgrade()
-        else:
-            assert False
 
     def bottom_action_types_not_fully_upgraded(self):
         return [action_space[1].bottom_action_typ for action_space in self.player_mat.action_spaces
