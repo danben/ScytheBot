@@ -226,6 +226,9 @@ class StarType(Enum):
 
         assert False
 
+    def __repr__(self):
+        return self.__str__()
+
 
 class TerrainType(Enum):
     MOUNTAIN = 1

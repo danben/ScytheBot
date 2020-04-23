@@ -21,7 +21,8 @@ class RandomAgent(Agent):
         return choice
 
     def choose_numeric(self, game_state, low, high):
-        logging.debug(f'Choosing between {low} and {high}')
+        if logging.getLogger().isEnabledFor(logging.DEBUG):
+            logging.debug(f'Choosing between {low} and {high}')
         return np.random.randint(low, high+1)
 
     def choose_board_coords(self, game_state, board_coords):

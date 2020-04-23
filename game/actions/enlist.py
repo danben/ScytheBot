@@ -3,7 +3,7 @@ from game.actions.action import BottomAction, Choice
 from game.types import Benefit, BottomActionType, ResourceType
 
 import attr
-
+import logging
 
 @attr.s(frozen=True, slots=True)
 class ChooseEnlistReward(Choice):
@@ -18,9 +18,12 @@ class ChooseEnlistReward(Choice):
 
     def do(self, game_state, enlist_reward):
         current_player = sc.get_current_player(game_state)
+        logging.debug(f'{current_player} enlists the {self.bottom_action_typ} recruit, taking the {enlist_reward} benefit')
         player_mat = current_player.player_mat.enlist(self.bottom_action_typ)
-        current_player = attr.evolve(current_player, player_mat=player_mat).mark_enlist_benefit(enlist_reward)
+        current_player = attr.evolve(current_player, player_mat=player_mat)
         game_state = sc.set_player(game_state, current_player)
+        game_state = sc.mark_enlist_benefit(game_state, current_player, enlist_reward)
+        current_player = sc.get_current_player(game_state)
         return sc.give_reward_to_player(game_state, current_player, enlist_reward, 2)
 
 

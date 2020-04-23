@@ -1,28 +1,28 @@
 import attr
 import numpy as np
 
-from pyrsistent import plist, thaw
+from pyrsistent import pvector, thaw
 
 
 def build_deck():
     deck = [2] * 16 + [3] * 12 + [4] * 8 + [5] * 6
     np.random.shuffle(deck)
-    return plist(deck)
+    return pvector(deck)
 
 
 @attr.s(frozen=True, slots=True)
 class CombatCards:
     deck = attr.ib(factory=build_deck)
-    discard_pile = attr.ib(factory=plist)
+    discard_pile = attr.ib(factory=pvector)
 
     def discard(self, card):
-        return attr.evolve(self, discard_pile=self.discard_pile.cons(card))
+        return attr.evolve(self, discard_pile=self.discard_pile.append(card))
 
     def reshuffle(self):
         assert not self.deck
         deck = thaw(self.discard_pile)
         np.random.shuffle(deck)
-        return CombatCards(plist(deck), plist())
+        return CombatCards(pvector(deck), pvector())
 
     def draw(self, amt):
         if amt > len(self.deck):
@@ -35,7 +35,7 @@ class CombatCards:
         if not remaining or not self.discard_pile:
             return attr.evolve(self, deck=new_deck), drawn
 
-        cc = attr.evolve(self, deck=plist()).reshuffle()
+        cc = attr.evolve(self, deck=pvector()).reshuffle()
         rest = min(remaining, len(cc.deck))
 
         drawn = thaw(drawn)

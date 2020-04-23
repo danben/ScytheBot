@@ -107,7 +107,8 @@ class PlayerMat:
                    bottom_spaces_by_bottom_action_typ)
 
     def move_pawn_to(self, i):
-        logging.debug(f'Space chosen: {self.action_spaces[i][0]} / {self.action_spaces[i][1]}')
+        if logging.getLogger().isEnabledFor(logging.DEBUG):
+            logging.debug(f'Space chosen: {self.action_spaces[i][0]} / {self.action_spaces[i][1]}')
         return attr.evolve(self, last_action_spot_taken=i)
 
     @staticmethod

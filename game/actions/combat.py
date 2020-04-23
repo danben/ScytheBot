@@ -33,9 +33,8 @@ class ResolveCombat(a.StateChange):
             piece = game_state.pieces_by_key[piece_key]
             if winner is self.attacking_faction_name and self.attacking_faction_name is not FactionName.POLANIA \
                     and piece.is_worker() and winning_player.popularity:
-                winning_player = winning_player.remove_popularity(1)
-        winning_player = attr.evolve(winning_player, stars=winning_player.stars.achieve(StarType.COMBAT))
-        return sc.set_player(game_state, winning_player)
+                game_state = sc.remove_popularity(game_state, winning_player, 1)
+        return sc.achieve(game_state, winning_player, StarType.COMBAT)
 
 
 @attr.s(frozen=True, slots=True)
@@ -60,8 +59,7 @@ class GetDefenderCombatCards(a.Choice):
         if card:
             self = attr.evolve(self, defender_total_power=(self.defender_total_power + card))
             defending_player = sc.get_player_by_faction_name(game_state, self.defending_faction_name)
-            defending_player, combat_cards = defending_player.discard_combat_card(card, game_state.combat_cards)
-            game_state = attr.evolve(sc.set_player(game_state, defending_player), combat_cards=combat_cards)
+            game_state = sc.discard_combat_card(game_state, defending_player, card)
         self = attr.evolve(self, num_combat_cards=(self.num_combat_cards - 1))
         if self.num_combat_cards:
             return sc.push_action(game_state, self)
@@ -90,8 +88,8 @@ class GetDefenderWheelPower(a.Choice):
         return agent.choose_numeric(game_state, 0, min(MAX_COMBAT_POWER, defending_player.power))
 
     def do(self, game_state, power):
-        defending_player = sc.get_player_by_faction_name(game_state, self.defending_faction_name).remove_power(power)
-        game_state = sc.set_player(game_state, defending_player)
+        game_state = sc.remove_power(game_state, sc.get_player_by_faction_name(game_state, self.defending_faction_name),
+                                     power)
         space = game_state.board.get_space(self.board_coords)
         num_combat_cards = space.num_combat_cards(self.defending_faction_name)
         if num_combat_cards:
@@ -132,8 +130,7 @@ class GetAttackerCombatCards(a.Choice):
         if card:
             self = attr.evolve(self, attacker_total_power=(self.attacker_total_power + card))
             attacking_player = sc.get_player_by_faction_name(game_state, self.attacking_faction_name)
-            attacking_player, combat_cards = attacking_player.discard_combat_card(card, game_state.combat_cards)
-            game_state = attr.evolve(sc.set_player(game_state, attacking_player), combat_cards=combat_cards)
+            game_state = sc.discard_combat_card(game_state, attacking_player, card)
         self = attr.evolve(self, num_combat_cards=self.num_combat_cards - 1)
         if self.num_combat_cards:
             return sc.push_action(game_state, self)
@@ -160,9 +157,8 @@ class GetAttackerWheelPower(a.Choice):
         return agent.choose_numeric(game_state, 0, min(MAX_COMBAT_POWER, attacking_player.power))
 
     def do(self, game_state, power):
-        attacking_player = sc.get_player_by_faction_name(game_state, self.attacking_faction_name)
-        attacking_player = attacking_player.remove_power(power)
-        game_state = sc.set_player(game_state, attacking_player)
+        game_state = sc.remove_power(game_state, sc.get_player_by_faction_name(game_state, self.attacking_faction_name),
+                                     power)
         space = game_state.board.get_space(self.board_coords)
         num_combat_cards = space.num_combat_cards(self.attacking_faction_name)
         if num_combat_cards:
@@ -197,10 +193,10 @@ class NordicMaybeUseCombatPower(a.Choice):
 
     def do(self, game_state, chosen):
         if chosen:
-            nordic_player = sc.get_player_by_faction_name(game_state, self.nordic_faction_name).remove_power(1)
-            not_nordic_player = sc.get_player_by_faction_name(game_state, self.not_nordic_faction_name).remove_power(2)
-            game_state = sc.set_player(game_state, nordic_player)
-            game_state = sc.set_player(game_state, not_nordic_player)
+            game_state = sc.remove_power(game_state,
+                                         sc.get_player_by_faction_name(game_state, self.nordic_faction_name), 1)
+            game_state = sc.remove_power(game_state,
+                                         sc.get_player_by_faction_name(game_state, self.not_nordic_faction_name), 2)
             game_state = sc.change_turn(game_state, self.attacking_faction_name)
         return game_state
 
@@ -222,18 +218,16 @@ class Combat(a.StateChange):
         space = game_state.board.get_space(self.board_coords)
         if space.has_tunnel(FactionName.SAXONY):
             if self.attacking_faction_name is FactionName.SAXONY:
-                defending_player = defending_player.remove_power(2)
-                game_state = sc.set_player(game_state, defending_player)
+                game_state = sc.remove_power(game_state, defending_player, 2)
             elif self.defending_faction_name is FactionName.SAXONY:
-                attacking_player = attacking_player.remove_power(2)
-                game_state = sc.set_player(game_state, attacking_player)
+                game_state = sc.remove_power(game_state, attacking_player, 2)
 
         if self.attacking_faction_name is FactionName.CRIMEA or self.defending_faction_name is FactionName.CRIMEA:
             crimea, not_crimea = (attacking_player, defending_player) \
                 if self.attacking_faction_name is FactionName.CRIMEA else (defending_player, attacking_player)
             not_crimea, card = not_crimea.remove_random_combat_card()
             if card:
-                crimea = crimea.add_combat_cards([card])
+                game_state = sc.add_combat_cards(game_state, crimea, [card])
                 game_state = sc.set_player(game_state, crimea)
                 game_state = sc.set_player(game_state, not_crimea)
 

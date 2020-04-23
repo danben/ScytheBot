@@ -44,7 +44,8 @@ class LoadWorkers(a.Choice):
         board_coords = sc.get_board_coords_for_piece_key(game_state, self.mech_key)
         space = game_state.board.get_space(board_coords)
         max_workers = len(space.worker_keys)
-        logging.debug(f'Can choose up to {max_workers} workers from space {space}')
+        if logging.getLogger().isEnabledFor(logging.DEBUG):
+            logging.debug(f'Can choose up to {max_workers} workers from space {space}')
         return agent.choose_numeric(game_state, 0, max_workers)
 
     def do(self, game_state, amt):
@@ -52,7 +53,8 @@ class LoadWorkers(a.Choice):
         board_space = game_state.board.get_space(mech.board_coords)
         if amt:
             added = 0
-            logging.debug(f'Load {amt} workers from {board_space}')
+            if logging.getLogger().isEnabledFor(logging.DEBUG):
+                logging.debug(f'Load {amt} workers from {board_space}')
             for worker_key in board_space.worker_keys:
                 mech = attr.evolve(mech, carrying_worker_keys=mech.carrying_worker_keys.add(worker_key))
                 added += 1
@@ -96,8 +98,9 @@ class MovePieceToSpaceAndDropCarryables(a.StateChange):
         if controller_of_new_space and controller_of_new_space is not current_player_faction:
             piece = attr.evolve(piece, moved_into_enemy_territory_this_turn=True)
             game_state = sc.set_piece(game_state, piece)
-            logging.debug(f'{current_player_faction} moved a piece into enemy territory'
-                          f' controlled by {controller_of_new_space}')
+            if logging.getLogger().isEnabledFor(logging.DEBUG):
+                logging.debug(f'{current_player_faction} moved a piece into enemy territory'
+                              f' controlled by {controller_of_new_space}')
             if piece.is_plastic() and new_space.contains_no_enemy_plastic(current_player_faction):
                 to_scare = set()
                 for worker_key in new_space.worker_keys:
@@ -105,12 +108,12 @@ class MovePieceToSpaceAndDropCarryables(a.StateChange):
                         to_scare.add(worker_key)
 
                 for worker_key in to_scare:
-                    logging.debug(f'Worker {worker_key} got scared home')
+                    if logging.getLogger().isEnabledFor(logging.DEBUG):
+                        logging.debug(f'Worker {worker_key} got scared home')
                     game_state = sc.move_piece(game_state, worker_key,
                                                game_state.board.home_base(worker_key.faction_name).coords)
 
-                current_player = sc.get_current_player(game_state).remove_popularity(len(to_scare))
-                game_state = sc.set_player(game_state, current_player)
+                game_state = sc.remove_popularity(game_state, sc.get_current_player(game_state), len(to_scare))
 
         old_space = game_state.board.get_space(piece.board_coords)
         new_space = game_state.board.get_space(self.board_coords)
@@ -127,7 +130,8 @@ class MovePieceToSpaceAndDropCarryables(a.StateChange):
                 assert worker.board_coords != self.board_coords
                 worker = attr.evolve(worker, board_coords=self.board_coords)
                 game_state = sc.set_piece(game_state, worker)
-                logging.debug(f'Mech carried worker to {self.board_coords}')
+                if logging.getLogger().isEnabledFor(logging.DEBUG):
+                    logging.debug(f'Mech carried worker to {self.board_coords}')
                 new_worker_keys = new_worker_keys.add(worker_key)
                 old_worker_keys = old_worker_keys.remove(worker_key)
             new_space = attr.evolve(new_space, worker_keys=new_worker_keys)
@@ -152,7 +156,8 @@ class MovePieceOneSpace(a.Choice):
 
     def choose(self, agent, game_state):
         effective_adjacent_space_coords = sc.effective_adjacent_space_coords(game_state, self.piece_key)
-        logging.debug(f'Choosing from {effective_adjacent_space_coords}')
+        if logging.getLogger().isEnabledFor(logging.DEBUG):
+            logging.debug(f'Choosing from {effective_adjacent_space_coords}')
         assert game_state.pieces_by_key[self.piece_key].board_coords not in effective_adjacent_space_coords
         return agent.choose_board_coords(game_state, effective_adjacent_space_coords)
 
@@ -213,11 +218,13 @@ class MoveOnePiece(a.Choice):
         movable_pieces = [piece for piece in sc.movable_pieces(game_state, current_player)
                           if sc.controller(game_state, game_state.board.get_space(piece.board_coords))
                           is current_player.faction_name()]
-        logging.debug(f'Choosing a piece from {"; ".join([str(piece) for piece in movable_pieces])}')
+        if logging.getLogger().isEnabledFor(logging.DEBUG):
+            logging.debug(f'Choosing a piece from {"; ".join([str(piece) for piece in movable_pieces])}')
         return agent.choose_piece(game_state, movable_pieces)
 
     def do(self, game_state, piece):
-        logging.debug(f'Chosen: {piece}')
+        if logging.getLogger().isEnabledFor(logging.DEBUG):
+            logging.debug(f'Chosen: {piece}')
         piece_key = piece.key()
         for _ in range(sc.get_current_player(game_state).base_move_for_piece_type(piece.typ) - 1):
             game_state = sc.push_action(game_state, a.Optional.new(LoadAndMovePiece.new(piece_key)))

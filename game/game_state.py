@@ -3,6 +3,7 @@ import game.components.combat_cards as gc_combat_cards
 import game.components.player_mat as gc_player_mat
 import game.components.piece as gc_piece
 import game.components.structure_bonus as gc_structure_bonus
+import game.state_change as sc
 from game.faction import choose as choose_faction
 from game.player import Player
 from game.types import PieceType, StructureType
@@ -64,17 +65,20 @@ class GameState:
             combat_cards, starting_combat_cards = combat_cards.draw(faction.starting_combat_cards)
             player = Player.new(i, faction, player_mat_names[i], board, starting_combat_cards)
             player_idx_by_faction_name[faction.name] = i
-            spaces_adjacent_to_home_base = board.adjacencies_accounting_for_rivers_and_lakes[player.home_base]
-            assert len(spaces_adjacent_to_home_base) == 2
-            player = player.add_workers([0, 1])
-            for j, coords in enumerate(spaces_adjacent_to_home_base):
-                board = add_piece_for_player(player, board, PieceType.WORKER, j, coords)
             board = add_piece_for_player(player, board, PieceType.CHARACTER, 0, player.home_base)
             players_by_idx[i] = player
 
         players_by_idx = pmap(players_by_idx)
         pieces_by_key = pmap(pieces_by_key)
         structure_bonus = gc_structure_bonus.StructureBonus.random()
-        return cls(board, structure_bonus, combat_cards, players_by_idx, player_idx_by_faction_name, pieces_by_key)
+        game_state = cls(board, structure_bonus, combat_cards, players_by_idx, player_idx_by_faction_name, pieces_by_key)
+        for i in range(num_players):
+            player = game_state.players_by_idx[i]
+            spaces_adjacent_to_home_base = board.adjacencies_accounting_for_rivers_and_lakes[player.home_base]
+            assert len(spaces_adjacent_to_home_base) == 2
+            for coords in spaces_adjacent_to_home_base:
+                game_state = sc.add_workers(game_state, player, coords, 1)
+                player = game_state.players_by_idx[i]
+        return game_state
 
 

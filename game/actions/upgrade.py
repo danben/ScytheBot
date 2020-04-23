@@ -17,8 +17,9 @@ class RemoveCubeFromAnyTopSpace(a.Choice):
 
     def do(self, game_state, top_action_typ_and_pos):
         top_action_typ, pos = top_action_typ_and_pos
-        logging.debug(f'Removed cube from position {pos} of {top_action_typ}')
-        return sc.set_player(game_state, sc.get_current_player(game_state).remove_upgrade_cube(top_action_typ, pos))
+        if logging.getLogger().isEnabledFor(logging.DEBUG):
+            logging.debug(f'Removed cube from position {pos} of {top_action_typ}')
+        return sc.remove_upgrade_cube(game_state, sc.get_current_player(game_state), top_action_typ, pos)
 
 
 @attr.s(frozen=True, slots=True)
@@ -34,7 +35,8 @@ class PlaceCubeInAnyBottomSpace(a.Choice):
                                                )
 
     def do(self, game_state, bottom_action_typ):
-        logging.debug(f'Removed cube from {bottom_action_typ}')
+        if logging.getLogger().isEnabledFor(logging.DEBUG):
+            logging.debug(f'Removed cube from {bottom_action_typ}')
         return sc.set_player(game_state, sc.get_current_player(game_state).upgrade_bottom_action(bottom_action_typ))
 
 

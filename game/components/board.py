@@ -96,7 +96,8 @@ class BoardSpace:
         return self.resources[resource_typ]
 
     def add_resources(self, resource_typ, amt=1):
-        logging.debug(f'{amt} {resource_typ} added to {self}')
+        if logging.getLogger().isEnabledFor(logging.DEBUG):
+            logging.debug(f'{amt} {resource_typ} added to {self}')
         new_resources = self.resources[resource_typ] + amt
         return attr.evolve(self, resources=self.resources.set(resource_typ, new_resources))
 
@@ -105,7 +106,8 @@ class BoardSpace:
 
     def remove_resources(self, resource_typ, amt=1):
         assert self.resources[resource_typ] >= amt
-        logging.debug(f'{amt} {resource_typ} removed from {self}')
+        if logging.getLogger().isEnabledFor(logging.DEBUG):
+            logging.debug(f'{amt} {resource_typ} removed from {self}')
         new_resources = self.resources[resource_typ] - amt
         return attr.evolve(self, resources=self.resources.set(resource_typ, new_resources))
 
@@ -304,7 +306,13 @@ class Board:
                     raise Exception(f'{piece_key} on {space} but thinks it is on {piece_coords}')
 
     def get_space(self, coords):
-        return self.board_spaces_by_coords[coords]
+        if not coords:
+            assert False
+        try:
+            return self.board_spaces_by_coords[coords]
+        except KeyError:
+            print(f'Missing coords: {coords}')
+            assert False
 
     def set_space(self, space):
         return attr.evolve(self, board_spaces_by_coords=self.board_spaces_by_coords.set(space.coords, space))

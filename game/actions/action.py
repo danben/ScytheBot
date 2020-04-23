@@ -42,7 +42,7 @@ class Choice(Action, ABC):
 
     def apply(self, game_state, chosen):
         if self.name:
-            logging.debug(f'{self.name}')
+            logging.debug(self.name)
         return self.do(game_state, chosen)
 
 
@@ -142,7 +142,8 @@ class SpendAResource(Choice):
         return agent.choose_board_coords(game_state, list(map(lambda x: x.coords, eligible_spaces)))
 
     def do(self, game_state, chosen):
-        logging.debug(f'1 from {chosen}')
+        if logging.getLogger().isEnabledFor(logging.DEBUG):
+            logging.debug(f'1 from {chosen}')
         board = game_state.board
         space = board.get_space(chosen)
         space = space.remove_resources(self.resource_typ)
@@ -164,11 +165,8 @@ class CrimeaMaybeChooseResource(Choice):
     def do(self, game_state, chosen):
         if chosen:
             new_cost = self.cost.reduce_by_1(chosen)
+            new_cost = attr.evolve(new_cost, combat_cars=new_cost.combat_cards+1)
             game_state = sc.charge_player(game_state, sc.get_current_player(game_state), new_cost)
-            current_player, combat_cards =\
-                sc.get_current_player(game_state).discard_lowest_combat_cards(1, game_state.combat_cards)
-            game_state = attr.evolve(game_state, combat_cards=combat_cards)
-            game_state = sc.set_player(game_state, current_player)
         else:
             game_state = sc.charge_player(game_state, sc.get_current_player(game_state), self.cost)
         return game_state
@@ -267,24 +265,21 @@ class BottomActionIfPaid(StateChange):
 
     def do(self, game_state):
         current_player = sc.get_current_player(game_state)
-        sc.set_player(game_state, current_player.add_coins(self.coins_payoff))
-
+        game_state = sc.add_coins(game_state, current_player, self.coins_payoff)
         game_state = sc.push_action(game_state, GiveEnlistBenefitsToNeighbors.new(self.bottom_action_typ,
                                                                                   self.enlist_benefit))
-        game_over = False
         try:
             if self.enlisted:
                 game_state = sc.give_reward_to_player(game_state, current_player, self.enlist_benefit, 1)
         except GameOver as e:
-            game_over = True
             game_state = sc.set_player(game_state, e.player)
+            game_state = sc.push_action(game_state, EndGame.new())
         finally:
-            if game_over:
-                game_state = sc.push_action(game_state, EndGame.new())
             if sc.can_legally_receive_action_benefit(game_state, current_player, self.bottom_action_typ):
                 game_state = sc.push_action(game_state, Optional.new(self.action_benefit))
             else:
-                logging.debug(f'Cannot receive benefit from action {self.bottom_action_typ} so skipping')
+                if logging.getLogger().isEnabledFor(logging.DEBUG):
+                    logging.debug(f'Cannot receive benefit from action {self.bottom_action_typ} so skipping')
         return game_state
 
 
@@ -311,11 +306,11 @@ class BottomAction(MaybePayCost):
         assert self.current_cost > self.mincost
         return attr.evolve(self, current_cost=self.current_cost - 1)
 
-    def enlist(self):
-        return attr.evolve(self, if_paid=attr.evolve(self.if_paid, enlisted=True))
-
-    def has_enlisted(self):
-        return self.if_paid.enlisted
+    # def enlist(self):
+    #     return attr.evolve(self, if_paid=attr.evolve(self.if_paid, enlisted=True))
+    #
+    # def has_enlisted(self):
+    #     return self.if_paid.enlisted
 
 
 @attr.s(frozen=True, slots=True)

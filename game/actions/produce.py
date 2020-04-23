@@ -53,14 +53,16 @@ class OnOneHex(a.Choice):
     def choose(self, agent, game_state):
         coords = sc.produceable_space_coords(game_state, sc.get_current_player(game_state))
         if coords:
-            logging.debug(f'Choosing from {coords}')
+            if logging.getLogger().isEnabledFor(logging.DEBUG):
+                logging.debug(f'Choosing from {coords}')
             return agent.choose_board_coords(game_state, coords)
         else:
             return None
 
     def do(self, game_state, coords):
         if coords:
-            logging.debug(f'Coords chosen: {coords}')
+            if logging.getLogger().isEnabledFor(logging.DEBUG):
+                logging.debug(f'Coords chosen: {coords}')
             return produce_on_space(coords, game_state)
         else:
             logging.debug('No spaces available for produce')

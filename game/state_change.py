@@ -1,13 +1,14 @@
 import game.actions.action as action
-from game.types import Benefit, BottomActionType, FactionName, MechType, PieceType, ResourceType, StarType, \
-    StructureType, TerrainType
 import game.components.piece as gc_piece
 import game.constants as constants
+from game.exceptions import GameOver
+from game.types import Benefit, BottomActionType, FactionName, MechType, PieceType, ResourceType, StarType, \
+    StructureType, TerrainType
 
 import attr
 import logging
 
-from pyrsistent import plist, pmap
+from pyrsistent import plist, pmap, thaw
 
 
 def push_action(game_state, to_push):
@@ -81,6 +82,11 @@ def _board_coords_with_piece_typ(game_state, player, piece_typ):
 
     pieces = [game_state.pieces_by_key[gc_piece.PieceKey(piece_typ, player.faction_name(), piece_id)]
               for piece_id in id_set]
+    for p in pieces:
+        assert p
+        if not p.board_coords:
+            print(f'Piece without board coords: {p!r}')
+            assert False
 
     ret = set([piece.board_coords for piece in pieces])
     ret.discard(player.home_base)
@@ -126,7 +132,17 @@ def controlled_spaces(game_state, player):
         board_coords_with_mechs(game_state, player)
     s.add(game_state.pieces_by_key[gc_piece.character_key(player.faction_name())].board_coords)
     s.discard(player.home_base)
-    s = set(map(game_state.board.get_space, s))
+
+    try:
+        s = set(map(game_state.board.get_space, s))
+    except AssertionError:
+        for s in board_coords_with_workers(game_state, player):
+            if not s:
+                print("workers")
+        for s in board_coords_with_mechs(game_state, player):
+            if not s:
+                print("mechs")
+        assert False
     to_remove = []
     for space in s:
         if controller(game_state, space) is not player.faction_name():
@@ -162,9 +178,7 @@ def board_coords_with_structures(game_state, player):
     for structure_typ in StructureType:
         if structure_typ in player.structures:
             ret.add(get_board_coords_for_piece_key(game_state,
-                                                   gc_piece.PieceKey(PieceType.STRUCTURE,
-                                                                     player.faction_name(),
-                                                                     structure_typ.value)))
+                                                   gc_piece.structure_key(player.faction_name(), structure_typ)))
     return ret
 
 
@@ -218,17 +232,114 @@ def remove_all_of_this_resource(game_state, player, resource_typ):
     return attr.evolve(game_state, board=board)
 
 
+def add_popularity(game_state, player, popularity):
+    if logging.getLogger().isEnabledFor(logging.DEBUG):
+        logging.debug(f'{player} receives {popularity} popularity')
+    player = attr.evolve(player, popularity=min(player.popularity + popularity, constants.MAX_POPULARITY))
+    game_state = set_player(game_state, player)
+    if player.popularity == constants.MAX_POPULARITY:
+        game_state = achieve(game_state, player, StarType.POPULARITY)
+    return game_state
+
+
+def remove_popularity(game_state, player, popularity):
+    if logging.getLogger().isEnabledFor(logging.DEBUG):
+        logging.debug(f'{player} loses {popularity} popularity')
+    player = attr.evolve(player, popularity=max(player.popularity - popularity, 0))
+    return set_player(game_state, player)
+
+
+def add_coins(game_state, player, coins):
+    if logging.getLogger().isEnabledFor(logging.DEBUG):
+        logging.debug(f'{player} receives {coins} coins')
+    player = attr.evolve(player, coins=player.coins+coins)
+    return set_player(game_state, player)
+
+
+def remove_coins(game_state, player, coins):
+    if logging.getLogger().isEnabledFor(logging.DEBUG):
+        logging.debug(f'{player} loses {coins} coins')
+    player = attr.evolve(player, coins=max(player.coins - coins, 0))
+    return set_player(game_state, player)
+
+
+def add_power(game_state, player, power):
+    if logging.getLogger().isEnabledFor(logging.DEBUG):
+        logging.debug(f'{player} receives {power} power')
+    new_power = min(player.power + power, constants.MAX_POWER)
+    player = attr.evolve(player, power=new_power)
+    game_state = set_player(game_state, player)
+    if new_power == constants.MAX_POWER:
+        game_state = achieve(game_state, player, StarType.POWER)
+    return game_state
+
+
+def remove_power(game_state, player, power):
+    player = attr.evolve(player, power=max(player.power - power, 0))
+    return set_player(game_state, player)
+
+
+def add_combat_cards(game_state, player, cards):
+    if logging.getLogger().isEnabledFor(logging.DEBUG):
+        logging.debug(f'{player} receives {len(cards)} combat cards')
+    combat_cards = thaw(player.combat_cards)
+    for card in cards:
+        combat_cards[card] += 1
+    player = attr.evolve(player, combat_cards=pmap(combat_cards))
+    return set_player(game_state, player)
+
+
+def discard_combat_card(game_state, player, card_value):
+    assert player.combat_cards[card_value]
+    if logging.getLogger().isEnabledFor(logging.DEBUG):
+        logging.debug(f'{player} discards a combat card with value {card_value}')
+    combat_cards = player.combat_cards.set(card_value, player.combat_cards[card_value] - 1)
+    player = attr.evolve(player, combat_cards=combat_cards)
+    combat_cards = game_state.combat_cards.discard(card_value)
+    game_state = set_player(game_state, player)
+    return attr.evolve(game_state, combat_cards=combat_cards)
+
+
+def discard_lowest_combat_cards(game_state, player, num_cards):
+    lowest = constants.MIN_COMBAT_CARD
+    for i in range(num_cards):
+        while not player.combat_cards[lowest]:
+            lowest += 1
+        if lowest > constants.MAX_COMBAT_CARD:
+            assert False
+        game_state = game_state.discard_combat_card(game_state, player, lowest)
+    return game_state
+
+
+def give_reward_to_player(game_state, player, benefit, amt):
+    if logging.getLogger().isEnabledFor(logging.DEBUG):
+        logging.debug(f'Receive {amt} {benefit}')
+    if benefit is Benefit.POPULARITY:
+        return add_popularity(game_state, player, amt)
+    elif benefit is Benefit.COINS:
+        return add_coins(game_state, player, amt)
+    elif benefit is Benefit.POWER:
+        return add_power(game_state, player, amt)
+    elif benefit is Benefit.COMBAT_CARDS:
+        combat_cards, new_cards = game_state.combat_cards.draw(amt)
+        game_state = attr.evolve(game_state, combat_cards=combat_cards)
+        return add_combat_cards(game_state, player, new_cards)
+
+    assert False
+
+
 def charge_player(game_state, player, cost):
     assert can_pay_cost(game_state, player, cost)
-    logging.debug(f'Pay {cost}')
+    if logging.getLogger().isEnabledFor(logging.DEBUG):
+        logging.debug(f'Pay {cost}')
     if cost.coins:
-        player = player.remove_coins(cost.coins)
+        game_state = remove_coins(game_state, player, cost.coins)
     if cost.power:
-        player = player.remove_power(cost.power)
+        game_state = remove_power(game_state, player, cost.power)
     if cost.popularity:
-        player = player.remove_popularity(cost.popularity)
+        game_state = remove_popularity(game_state, player, cost.popularity)
     if cost.combat_cards:
-        player = player.discard_lowest_combat_cards(cost.combat_cards, game_state.combat_cards)
+        game_state = discard_lowest_combat_cards(game_state, player, cost.combat_cards)
     for resource_typ in ResourceType:
         amount_owned = available_resources(game_state, player, resource_typ)
         amount_owed = cost.resource_cost[resource_typ]
@@ -239,45 +350,53 @@ def charge_player(game_state, player, cost):
             assert amount_owned == cost.resource_cost[resource_typ]
             game_state = remove_all_of_this_resource(game_state, player, resource_typ)
 
-    return set_player(game_state, player)
+    return game_state
 
 
-def give_reward_to_player(game_state, player, benefit, amt):
-    logging.debug(f'Receive {amt} {benefit}')
-    if benefit is Benefit.POPULARITY:
-        player = player.add_popularity(amt)
-    elif benefit is Benefit.COINS:
-        player = player.add_coins(amt)
-    elif benefit is Benefit.POWER:
-        player = player.add_power(amt)
-    elif benefit is Benefit.COMBAT_CARDS:
-        combat_cards, new_cards = game_state.combat_cards.draw(amt)
-        game_state = attr.evolve(game_state, combat_cards=combat_cards)
-        player = player.add_combat_cards(new_cards)
-
-    return set_player(game_state, player)
+def achieve(game_state, player, star_typ):
+    stars = player.stars
+    if stars.achieved[star_typ] < stars.limits[star_typ]:
+        if logging.getLogger().isEnabledFor(logging.DEBUG):
+            logging.debug(f'Star achieved: {star_typ}')
+        assert stars.count < 6
+        stars = attr.evolve(stars, count=stars.count+1,
+                            achieved=stars.achieved.set(star_typ, stars.achieved[star_typ]+1))
+        player = attr.evolve(player, stars=stars)
+        game_state = set_player(game_state, player)
+        if stars.count == 6:
+            raise GameOver(game_state)
+        return game_state
+    else:
+        return game_state
 
 
 def add_workers(game_state, player, coords, amt):
-    max_worker_id = max(player.worker_ids)
+    max_worker_id = max(player.worker_ids) if player.worker_ids else -1
     assert max_worker_id + amt < constants.NUM_WORKERS
     ids = list(range(max_worker_id+1, max_worker_id+amt+1))
-    game_state = set_player(game_state, player.add_workers(ids))
+    for worker_id in ids:
+        assert len(player.worker_ids) < constants.NUM_WORKERS and worker_id not in player.worker_ids
+        worker_ids = player.worker_ids.add(worker_id)
+        player = attr.evolve(player, worker_ids=worker_ids)
+        game_state = set_player(game_state, player)
     space = game_state.board.get_space(coords)
     for i in ids:
-        piece_key = gc_piece.PieceKey(PieceType.WORKER, player.faction_name(), i)
+        piece_key = gc_piece.worker_key(player.faction_name(), i)
         space = space.add_piece(piece_key)
         piece = attr.evolve(game_state.pieces_by_key[piece_key], board_coords=coords)
         game_state = attr.evolve(game_state, pieces_by_key=game_state.pieces_by_key.set(piece_key, piece))
     board = game_state.board.set_space(space)
-    return attr.evolve(game_state, board=board)
+    game_state = attr.evolve(game_state, board=board)
+    if len(player.worker_ids) == constants.NUM_WORKERS:
+        game_state = achieve(game_state, player, StarType.WORKER)
+    return game_state
 
 
 def build_structure(game_state, player, board_coords, structure_typ):
     assert structure_typ not in player.structures
     board_space = game_state.board.get_space(board_coords)
     assert not board_space.has_structure()
-    structure_key = gc_piece.PieceKey(PieceType.STRUCTURE, player.faction_name(), structure_typ.value)
+    structure_key = gc_piece.structure_key(player.faction_name(), structure_typ)
     board_space = attr.evolve(board_space, structure=structure_key)
     game_state = attr.evolve(game_state, board=game_state.board.set_space(board_space))
     structure = attr.evolve(game_state.pieces_by_key[structure_key], board_coords=board_coords)
@@ -293,8 +412,6 @@ def build_structure(game_state, player, board_coords, structure_typ):
                                                                           top_action_cubes_and_structures
                                                                           ))
     player = attr.evolve(player, structures=player.structures.add(structure_typ), player_mat=player_mat)
-    if not player.has_unbuilt_structures():
-        player = attr.evolve(player, stars=player.stars.achieve(StarType.STRUCTURE))
     if structure_typ is StructureType.MINE:
         # For every tunnel space on the board, add it to the current space's
         # adjacency list and add the current space to its adjacency list.
@@ -327,13 +444,17 @@ def build_structure(game_state, player, board_coords, structure_typ):
             new_adjacencies[piece_typ] = pmap(new_piece_adjacencies)
         # And finally replace the player's piece-adjacencies mapping.
         player = attr.evolve(player, adjacencies=pmap(new_adjacencies))
-    return set_player(game_state, player)
+    game_state = set_player(game_state, player)
+    if not player.has_unbuilt_structures():
+        game_state = achieve(game_state, player, StarType.STRUCTURE)
+    return game_state
 
 
 def deploy_mech(game_state, player, mech_type, board_coords):
     assert mech_type.value not in player.mech_ids
     mk = gc_piece.mech_key(player.faction_name(), mech_type.value)
-    logging.debug(f'{player} deploys {mech_type} mech to {board_coords} with key {mk}')
+    if logging.getLogger().isEnabledFor(logging.DEBUG):
+        logging.debug(f'{player} deploys {mech_type} mech to {board_coords} with key {mk}')
     board = game_state.board.add_piece(mk, board_coords)
     game_state = attr.evolve(game_state, board=board)
     mech = attr.evolve(game_state.pieces_by_key[mk], board_coords=board_coords)
@@ -345,12 +466,31 @@ def deploy_mech(game_state, player, mech_type, board_coords):
     else:
         adjacencies = player.adjacencies
     player = attr.evolve(player, mech_ids=player.mech_ids.add(mech_type.value), adjacencies=adjacencies)
-
+    game_state = set_player(game_state, player)
     if not player.has_undeployed_mechs():
-        stars = player.stars.achieve(StarType.MECH)
-        player = attr.evolve(player, stars=stars)
-        player = attr.evolve(player, stars=stars)
-    return set_player(game_state, player)
+        game_state = achieve(game_state, player, StarType.MECH)
+    return game_state
+
+
+def remove_upgrade_cube(game_state, player, top_action_typ, spot):
+    assert player.can_upgrade()
+    player = attr.evolve(player, player_mat=player.player_mat.remove_upgrade_cube(top_action_typ, spot))
+    game_state = set_player(game_state, player)
+    if not player.can_upgrade():
+        game_state = achieve(game_state, player, StarType.UPGRADE)
+    return game_state
+
+
+def mark_enlist_benefit(game_state, player, enlist_benefit):
+    assert not player.enlist_rewards[enlist_benefit]
+    if logging.getLogger().isEnabledFor(logging.DEBUG):
+        logging.debug(f'{player} takes enlist benefit {enlist_benefit}')
+    enlist_rewards = player.enlist_rewards.set(enlist_benefit, True)
+    player = attr.evolve(player, enlist_rewards=enlist_rewards)
+    game_state = set_player(game_state, player)
+    if not player.can_enlist():
+        game_state = achieve(game_state, player, StarType.RECRUIT)
+    return game_state
 
 
 def available_resources(game_state, player, resource_typ):
@@ -460,7 +600,8 @@ def effective_adjacent_space_coords(game_state, piece_key):
 
 
 def end_turn(game_state, player):
-    logging.debug(f'{player} ends their turn')
+    if logging.getLogger().isEnabledFor(logging.DEBUG):
+        logging.debug(f'{player} ends their turn')
     pieces_by_key = game_state.pieces_by_key
     faction_name = player.faction_name()
     ck = gc_piece.character_key(faction_name)
@@ -491,7 +632,8 @@ def end_turn(game_state, player):
 def move_piece(game_state, piece_key, to_coords):
     board = game_state.board
     piece = game_state.pieces_by_key[piece_key]
-    logging.debug(f'{piece_key} moves from {piece.board_coords} to {to_coords}')
+    if logging.getLogger().isEnabledFor(logging.DEBUG):
+        logging.debug(f'{piece_key} moves from {piece.board_coords} to {to_coords}')
     old_space = board.get_space(piece.board_coords).remove_piece(piece_key)
     new_space = board.get_space(to_coords).add_piece(piece_key)
     piece = attr.evolve(piece, board_coords=to_coords)
