@@ -240,7 +240,7 @@ class TerrainType(Enum):
     LAKE = 7
     HOME_BASE = 8
 
-    def resource_type(self):
+    def resource_typ(self):
         if self is TerrainType.MOUNTAIN:
             return ResourceType.METAL
         elif self is TerrainType.TUNDRA:

@@ -13,7 +13,7 @@ class PieceKey:
     id = attr.ib()
 
     def __str__(self):
-        return f'{self.faction_name} {self.piece_typ}'
+        return f'{self.faction_name} {self.piece_typ} {self.id}'
 
 
 # TODO: dedup attributes between these two classes
@@ -25,7 +25,7 @@ class _Piece:
     id = attr.ib()
 
     def __str__(self):
-        return f'{self.typ} {self.board_coords}'
+        return f'{self.faction_name} {self.typ} {self.id} -- {self.board_coords}'
 
     def key(self):
         return PieceKey(self.typ, self.faction_name, self.id)

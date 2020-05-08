@@ -2,11 +2,12 @@ from abc import ABC, abstractmethod
 
 
 class Agent(ABC):
-    def __init__(self):
-        super().__init__()
+    @abstractmethod
+    def choose_action(self, game_state, choices):
+        pass
 
     @abstractmethod
-    def choose_action_spot(self, game_state, invalid):
+    def choose_action_spot(self, game_state, choices):
         pass
 
     @abstractmethod
@@ -14,45 +15,41 @@ class Agent(ABC):
         pass
 
     @abstractmethod
-    def choose_numeric(self, game_state, low, high):
+    def choose_numeric(self, game_state, choices):
         pass
 
     @abstractmethod
-    def choose_board_coords(self, game_state, board_coords):
+    def choose_board_coords(self, game_state, choices):
         pass
 
     @abstractmethod
-    def choose_piece(self, game_state, pieces):
+    def choose_piece(self, game_state, choices):
         pass
 
     @abstractmethod
-    def choose_whether_to_pay_for_next_action(self, game_state):
+    def choose_resource_typ(self, game_state, choices):
         pass
 
     @abstractmethod
-    def choose_resource_type(self, game_state):
+    def choose_bottom_action_typ(self, game_state, choices):
         pass
 
     @abstractmethod
-    def choose_bottom_action_type(self, game_state, bottom_action_types):
+    def choose_enlist_reward(self, game_state, choices):
         pass
 
     @abstractmethod
-    def choose_enlist_reward(self, game_state):
+    def choose_mech_typ_to_deploy(self, game_state, choices):
         pass
 
     @abstractmethod
-    def choose_mech_type_to_deploy(self, game_state):
+    def choose_structure_typ(self, game_state, choices):
         pass
 
     @abstractmethod
-    def choose_structure_to_build(self, game_state):
+    def choose_cube_space_to_upgrade(self, game_state, choices):
         pass
 
     @abstractmethod
-    def choose_cube_space_to_upgrade(self, game_state):
-        pass
-
-    @abstractmethod
-    def choose_optional_combat_card(self, game_state):
+    def choose_optional_combat_card(self, game_state, choices):
         pass

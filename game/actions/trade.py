@@ -1,6 +1,6 @@
 import game.actions.action as a
 import game.state_change as sc
-from game.types import Benefit, TopActionType
+from game.types import Benefit, ResourceType, TopActionType
 
 import attr
 
@@ -13,10 +13,12 @@ class ChooseBoardSpaceForResource(a.Choice):
     def new(cls, chosen):
         return cls(f'Choose board space to receive {chosen}', chosen)
 
-    def choose(self, agent, game_state):
+    def choices(self, game_state):
         current_player = sc.get_current_player(game_state)
-        eligible_spaces = sc.board_coords_with_workers(game_state, current_player)
-        return agent.choose_board_coords(game_state, list(eligible_spaces))
+        return list(sc.board_coords_with_workers(game_state, current_player))
+
+    def choose(self, agent, game_state):
+        return agent.choose_board_coords(game_state, self.choices(game_state))
 
     def do(self, game_state, chosen):
         space = game_state.board.get_space(chosen).add_resources(self.resource_typ, 1)
@@ -29,8 +31,11 @@ class ChooseResourceType(a.Choice):
     def new(cls):
         return cls('Choose resource type')
 
+    def choices(self, game_state):
+        return [x for x in ResourceType]
+
     def choose(self, agent, game_state):
-        return agent.choose_resource_type(game_state)
+        return agent.choose_resource_typ(game_state, self.choices(game_state))
 
     def do(self, game_state, chosen):
         return sc.push_action(game_state, ChooseBoardSpaceForResource.new(chosen))
@@ -38,15 +43,15 @@ class ChooseResourceType(a.Choice):
 
 @attr.s(frozen=True, slots=True)
 class GainResources(a.StateChange):
-    _choose_resource_type = ChooseResourceType.new()
+    _choose_resource_typ = ChooseResourceType.new()
 
     @classmethod
     def new(cls):
         return cls('Gain resources for trade action')
 
     def do(self, game_state):
-        game_state = sc.push_action(game_state, GainResources._choose_resource_type)
-        return sc.push_action(game_state, GainResources._choose_resource_type)
+        game_state = sc.push_action(game_state, GainResources._choose_resource_typ)
+        return sc.push_action(game_state, GainResources._choose_resource_typ)
 
 
 @attr.s(frozen=True, slots=True)

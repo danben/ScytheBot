@@ -8,7 +8,7 @@ import attr
 import logging
 import numpy as np
 
-from pyrsistent import pmap, pset, thaw
+from pyrsistent import pmap, pset
 
 
 @attr.s(frozen=True, slots=True)
@@ -19,7 +19,7 @@ class Stars:
     achieved = attr.ib(default=pmap({x: 0 for x in StarType}))
 
     def __str__(self):
-        return str([x for l in [[styp] * self.achieved[styp] for styp in StarType] for x in l])
+        return str([x for lst in [[styp] * self.achieved[styp] for styp in StarType] for x in lst])
 
     @classmethod
     def from_faction_name(cls, faction_name):
@@ -94,7 +94,7 @@ class Player:
             piece = game_state.pieces_by_key[structure_key]
             assert piece.board_coords
             board_space = game_state.board.get_space(piece.board_coords)
-            assert board_space.structure == structure_key
+            assert board_space.structure_key == structure_key
         for coords in sc.board_coords_with_mechs(game_state, self):
             assert coords
         for coords in sc.board_coords_with_structures(game_state, self):
@@ -177,7 +177,7 @@ class Player:
     def can_enlist(self):
         return not all(self.enlist_rewards.values())
 
-    def unenlisted_bottom_action_types(self):
+    def unenlisted_bottom_action_typs(self):
         return [b for b, enlisted in self.player_mat.has_enlisted_by_bottom_action_typ.items() if not enlisted]
 
     def available_enlist_rewards(self):
@@ -186,7 +186,7 @@ class Player:
     def has_enlisted(self, bottom_action_typ):
         return self.player_mat.has_enlisted_by_bottom_action_typ[bottom_action_typ]
 
-    def top_action_types_with_unbuilt_structures(self):
+    def top_action_typs_with_unbuilt_structures(self):
         return [t for t, x in self.player_mat.top_action_cubes_and_structures_by_top_action_typ.items()
                 if not x.structure_is_built]
 
@@ -196,20 +196,20 @@ class Player:
     def has_unbuilt_structures(self):
         return len(self.structures) < constants.NUM_STRUCTURES
 
-    def undeployed_mech_types(self):
+    def undeployed_mech_typs(self):
         return [i for i in MechType if i.value not in self.mech_ids]
 
     def has_undeployed_mechs(self):
         return len(self.mech_ids) < constants.NUM_MECHS
 
-    def base_move_for_piece_type(self, piece_typ):
+    def base_move_for_piece_typ(self, piece_typ):
         if piece_typ is PieceType.WORKER:
             return 1
         elif piece_typ is PieceType.CHARACTER or piece_typ is PieceType.MECH:
             return 2 if MechType.SPEED.value in self.mech_ids else 1
         assert False
 
-    def bottom_action_types_not_fully_upgraded(self):
+    def bottom_action_typs_not_fully_upgraded(self):
         return [action_space[1].bottom_action_typ for action_space in self.player_mat.action_spaces
                 if action_space[1].is_upgradeable()]
 

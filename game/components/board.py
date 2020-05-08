@@ -3,7 +3,7 @@ from game.types import FactionName, PieceType, ResourceType, StructureType, Terr
 
 import attr
 import logging
-from pyrsistent import plist, pmap, pset
+from pyrsistent import plist, pmap, pset, pvector
 
 # Each pair of coordinate pairs represents two hexes that are separated by a river.
 ALL_RIVERS = {((0, 3), (1, 3)), ((0, 3), (0, 4)), ((0, 4), (1, 3)), ((0, 5), (0, 6)), ((0, 5), (1, 5)),
@@ -34,7 +34,7 @@ class BoardSpace:
     mech_keys = attr.ib(default=pset())
     worker_keys = attr.ib(default=pset())
     resources = attr.ib(default=pmap({r: 0 for r in ResourceType}))
-    structure = attr.ib(default=None)
+    structure_key = attr.ib(default=None)
     encounter_used = attr.ib(default=False)
     produced_this_turn = attr.ib(default=False)
 
@@ -70,6 +70,15 @@ class BoardSpace:
 
         return True
 
+    def contains_no_enemy_workers(self, faction_name):
+        for w in self.worker_keys:
+            if w.faction_name is not faction_name:
+                return False
+        return True
+
+    def controlled_by_structure(self):
+        return (not self.mech_keys) and (not self.worker_keys) and (not self.character_keys) and self.structure_key
+
     def num_combat_cards(self, faction):
         ret = 0
         for c in self.character_keys:
@@ -86,11 +95,11 @@ class BoardSpace:
 
     def has_tunnel(self, faction_name=None):
         return self._has_tunnel or \
-               (faction_name and self.structure and self.structure.id == StructureType.MINE.value
-                and self.structure.faction_name is faction_name)
+               (faction_name and self.structure_key and self.structure_key.id == StructureType.MINE.value
+                and self.structure_key.faction_name is faction_name)
 
     def has_structure(self):
-        return self.structure is not None
+        return self.structure_key is not None
 
     def has_resource(self, resource_typ):
         return self.resources[resource_typ]
@@ -278,7 +287,7 @@ class Board:
             adjacent_space_coords = [other for other in all_adjacent_space_coords
                                      if not (blocked_by_river(from_space_coords, other)
                                              or board_spaces_by_coords[other].terrain_typ is TerrainType.LAKE)]
-            adjacencies_accounting_for_rivers_and_lakes[from_space_coords] = plist(adjacent_space_coords)
+            adjacencies_accounting_for_rivers_and_lakes[from_space_coords] = pvector(adjacent_space_coords)
 
         for space in board_spaces_by_coords.values():
             if space.terrain_typ is TerrainType.LAKE:
@@ -300,19 +309,21 @@ class Board:
 
     def invariant(self, game_state):
         for space in self.board_spaces_by_coords.values():
+            worker_factions = set()
             for piece_key in space.all_piece_keys():
                 piece_coords = game_state.pieces_by_key[piece_key].board_coords
                 if piece_coords != space.coords:
                     raise Exception(f'{piece_key} on {space} but thinks it is on {piece_coords}')
+                if piece_key.piece_typ is PieceType.WORKER:
+                    worker_factions.add(piece_key.faction_name)
+            if len(worker_factions) > 1:
+                print(f'Multiple players\' workers on single spot:')
+                print(f'{space!r}')
+                assert False
 
     def get_space(self, coords):
-        if not coords:
-            assert False
-        try:
-            return self.board_spaces_by_coords[coords]
-        except KeyError:
-            print(f'Missing coords: {coords}')
-            assert False
+        assert coords
+        return self.board_spaces_by_coords[coords]
 
     def set_space(self, space):
         return attr.evolve(self, board_spaces_by_coords=self.board_spaces_by_coords.set(space.coords, space))

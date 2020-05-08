@@ -5,6 +5,7 @@ from game.types import Benefit, BottomActionType, ResourceType
 import attr
 import logging
 
+
 @attr.s(frozen=True, slots=True)
 class ChooseEnlistReward(Choice):
     bottom_action_typ = attr.ib()
@@ -13,12 +14,16 @@ class ChooseEnlistReward(Choice):
     def new(cls, bottom_action_typ):
         return cls('Choose enlist reward', bottom_action_typ)
 
+    def choices(self, game_state):
+        return sc.get_current_player(game_state).available_enlist_rewards()
+
     def choose(self, agent, game_state):
-        return agent.choose_enlist_reward(game_state)
+        return agent.choose_enlist_reward(game_state, self.choices(game_state))
 
     def do(self, game_state, enlist_reward):
         current_player = sc.get_current_player(game_state)
-        logging.debug(f'{current_player} enlists the {self.bottom_action_typ} recruit, taking the {enlist_reward} benefit')
+        logging.debug(f'{current_player} enlists the {self.bottom_action_typ} recruit, \
+        taking the {enlist_reward} benefit')
         player_mat = current_player.player_mat.enlist(self.bottom_action_typ)
         current_player = attr.evolve(current_player, player_mat=player_mat)
         game_state = sc.set_player(game_state, current_player)
@@ -33,9 +38,11 @@ class ChooseRecruitToEnlist(Choice):
     def new(cls):
         return cls('Choose recruit to enlist')
 
+    def choices(self, game_state):
+        return sc.get_current_player(game_state).unenlisted_bottom_action_typs()
+
     def choose(self, agent, game_state):
-        return agent.choose_bottom_action_type(game_state,
-                                               sc.get_current_player(game_state).unenlisted_bottom_action_types())
+        return agent.choose_bottom_action_typ(game_state, self.choices(game_state))
 
     def do(self, game_state, bottom_action_typ):
         return sc.push_action(game_state, ChooseEnlistReward.new(bottom_action_typ))

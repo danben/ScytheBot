@@ -1,6 +1,6 @@
 import game.actions.action as a
 import game.state_change as sc
-from game.types import TerrainType, TopActionType
+from game.types import StructureType, TerrainType, TopActionType
 
 import attr
 import logging
@@ -15,10 +15,15 @@ class ChooseNumWorkers(a.Choice):
     def new(cls, space, max_workers):
         return cls('Choose number of workers to receive', space, max_workers)
 
+    def choices(self, game_state):
+        return list(range(1, self.max_workers+1))
+
     def choose(self, agent, game_state):
-        high = self.max_workers
-        low = min(1, high)
-        return agent.choose_numeric(game_state, low, high)
+        c = self.choices(game_state)
+        if not c:
+            print(f'Max workers: {self.max_workers}')
+            assert False
+        return agent.choose_numeric(game_state, c)
 
     def do(self, game_state, amt):
         return sc.push_action(game_state, a.ReceiveWorkers.new(amt, self.coords))
@@ -32,16 +37,23 @@ def produce_on_space(coords, game_state):
     game_state = attr.evolve(game_state, board=game_state.board.set_space(space),
                              spaces_produced_this_turn=game_state.spaces_produced_this_turn.add(space.coords))
     num_workers = len(space.worker_keys)
+    current_player = sc.get_current_player(game_state)
+    if space.has_structure() and space.structure_key.id == StructureType.MILL.value \
+            and space.structure_key.faction_name is current_player.faction_name():
+        num_workers += 1
 
-    if space.terrain_typ is TerrainType.VILLAGE:
+    if space.terrain_typ is TerrainType.VILLAGE and current_player.available_workers():
         return sc.push_action(game_state,
                               ChooseNumWorkers.new(space.coords,
                                                    min(num_workers,
-                                                       sc.get_current_player(game_state).available_workers()
+                                                       current_player.available_workers()
                                                        )))
     else:
-        space = space.add_resources(space.terrain_typ.resource_type(), num_workers)
-        return attr.evolve(game_state, board=game_state.board.set_space(space))
+        if space.terrain_typ is TerrainType.VILLAGE:
+            return game_state
+        else:
+            space = space.add_resources(space.terrain_typ.resource_typ(), num_workers)
+            return attr.evolve(game_state, board=game_state.board.set_space(space))
 
 
 @attr.s(frozen=True, slots=True)
@@ -50,8 +62,11 @@ class OnOneHex(a.Choice):
     def new(cls):
         return cls('Produce on a single hex')
 
+    def choices(self, game_state):
+        return sc.produceable_space_coords(game_state, sc.get_current_player(game_state))
+
     def choose(self, agent, game_state):
-        coords = sc.produceable_space_coords(game_state, sc.get_current_player(game_state))
+        coords = self.choices(game_state)
         if coords:
             if logging.getLogger().isEnabledFor(logging.DEBUG):
                 logging.debug(f'Choosing from {coords}')
@@ -108,7 +123,8 @@ class ProduceIfPaid(a.StateChange):
         # one of the other produce actions
         if top_action_cubes_and_structure.structure_is_built:
             mill_space = sc.mill_space(game_state, current_player)
-            if mill_space.terrain_typ is not TerrainType.FACTORY:
+            if mill_space.terrain_typ is not TerrainType.FACTORY \
+                    and sc.controller(game_state, mill_space) is current_player.faction_name():
                 game_state = sc.push_action(game_state, ProduceIfPaid._on_mill_hex)
         return game_state
 

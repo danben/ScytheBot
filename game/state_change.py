@@ -1,5 +1,6 @@
 import game.actions.action as action
 import game.components.piece as gc_piece
+import game.components.structure_bonus as gc_structure_bonus
 import game.constants as constants
 from game.exceptions import GameOver
 from game.types import Benefit, BottomActionType, FactionName, MechType, PieceType, ResourceType, StarType, \
@@ -8,7 +9,7 @@ from game.types import Benefit, BottomActionType, FactionName, MechType, PieceTy
 import attr
 import logging
 
-from pyrsistent import plist, pmap, thaw
+from pyrsistent import pmap, pset, thaw, PVector
 
 
 def push_action(game_state, to_push):
@@ -21,12 +22,8 @@ def pop_action(game_state):
     top_action = game_state.action_stack.first
     if top_action:
         game_state = attr.evolve(game_state, action_stack=game_state.action_stack.rest)
-        if isinstance(game_state, tuple):
-            raise Exception("very bad")
         return game_state, top_action
     else:
-        if isinstance(game_state, tuple):
-            raise Exception("almost as bad")
         return game_state, None
 
 
@@ -80,15 +77,11 @@ def _board_coords_with_piece_typ(game_state, player, piece_typ):
     else:
         assert False
 
-    pieces = [game_state.pieces_by_key[gc_piece.PieceKey(piece_typ, player.faction_name(), piece_id)]
-              for piece_id in id_set]
-    for p in pieces:
-        assert p
-        if not p.board_coords:
-            print(f'Piece without board coords: {p!r}')
-            assert False
-
-    ret = set([piece.board_coords for piece in pieces])
+    faction_name = player.faction_name()
+    ret = set()
+    for piece_id in id_set:
+        piece = game_state.pieces_by_key[gc_piece.PieceKey(piece_typ, faction_name, piece_id)]
+        ret.add(piece.board_coords)
     ret.discard(player.home_base)
     return ret
 
@@ -111,9 +104,11 @@ def controller(game_state, board_space):
         mech = game_state.pieces_by_key[mech_key]
         if not mech.moved_into_enemy_territory_this_turn:
             candidates.add(mech_key.faction_name)
-    if len(candidates) > 1:
+    if len(candidates) > 2:
         logging.error(f'Multiple controller candidates on space {board_space}: {candidates}')
         assert False
+    if len(candidates) == 2:
+        candidates.discard(get_current_player(game_state).faction_name())
     if len(candidates) == 1:
         return candidates.pop()
     for worker_key in board_space.worker_keys:
@@ -122,37 +117,30 @@ def controller(game_state, board_space):
         assert False
     if len(candidates) == 1:
         return candidates.pop()
-    if board_space.structure:
-        return board_space.structure.faction_name
+    if board_space.structure_key:
+        return board_space.structure_key.faction_name
     return None
 
 
+# TODO: optimize this. Possibly cache the controller on spaces, though that doesn't
+# seem to be the main slowness culprit.
 def controlled_spaces(game_state, player):
+    player_faction = player.faction_name()
     s = board_coords_with_workers(game_state, player) | \
         board_coords_with_mechs(game_state, player)
-    s.add(game_state.pieces_by_key[gc_piece.character_key(player.faction_name())].board_coords)
+    s.add(game_state.pieces_by_key[gc_piece.character_key(player_faction)].board_coords)
     s.discard(player.home_base)
-
-    try:
-        s = set(map(game_state.board.get_space, s))
-    except AssertionError:
-        for s in board_coords_with_workers(game_state, player):
-            if not s:
-                print("workers")
-        for s in board_coords_with_mechs(game_state, player):
-            if not s:
-                print("mechs")
-        assert False
+    s = set(map(game_state.board.get_space, s))
     to_remove = []
     for space in s:
-        if controller(game_state, space) is not player.faction_name():
+        if controller(game_state, space) is not player_faction:
             to_remove.append(space)
     for space in to_remove:
         s.remove(space)
     to_add = []
     for coords in board_coords_with_structures(game_state, player):
         space = game_state.board.get_space(coords)
-        if controller(game_state, space) is player.faction_name():
+        if controller(game_state, space) is player_faction:
             to_add.append(space)
     for space in to_add:
         s.add(space)
@@ -358,12 +346,12 @@ def achieve(game_state, player, star_typ):
     if stars.achieved[star_typ] < stars.limits[star_typ]:
         if logging.getLogger().isEnabledFor(logging.DEBUG):
             logging.debug(f'Star achieved: {star_typ}')
-        assert stars.count < 6
+        assert stars.count <= constants.MAX_STARS
         stars = attr.evolve(stars, count=stars.count+1,
                             achieved=stars.achieved.set(star_typ, stars.achieved[star_typ]+1))
         player = attr.evolve(player, stars=stars)
         game_state = set_player(game_state, player)
-        if stars.count == 6:
+        if stars.count == constants.MAX_STARS:
             raise GameOver(game_state)
         return game_state
     else:
@@ -372,6 +360,10 @@ def achieve(game_state, player, star_typ):
 
 def add_workers(game_state, player, coords, amt):
     max_worker_id = max(player.worker_ids) if player.worker_ids else -1
+    if max_worker_id is None:
+        assert False
+    if amt is None:
+        assert False
     assert max_worker_id + amt < constants.NUM_WORKERS
     ids = list(range(max_worker_id+1, max_worker_id+amt+1))
     for worker_id in ids:
@@ -397,7 +389,7 @@ def build_structure(game_state, player, board_coords, structure_typ):
     board_space = game_state.board.get_space(board_coords)
     assert not board_space.has_structure()
     structure_key = gc_piece.structure_key(player.faction_name(), structure_typ)
-    board_space = attr.evolve(board_space, structure=structure_key)
+    board_space = attr.evolve(board_space, structure_key=structure_key)
     game_state = attr.evolve(game_state, board=game_state.board.set_space(board_space))
     structure = attr.evolve(game_state.pieces_by_key[structure_key], board_coords=board_coords)
     game_state = attr.evolve(game_state, pieces_by_key=game_state.pieces_by_key.set(structure_key, structure))
@@ -432,10 +424,10 @@ def build_structure(game_state, player, board_coords, structure_typ):
                     if other_space.has_tunnel(player.faction_name()):
                         # If so, add the current spot to its adjacency list...
                         if board_coords not in adjacent_coords:
-                            adjacent_coords = adjacent_coords.cons(board_coords)
+                            adjacent_coords = adjacent_coords.append(board_coords)
                         # And add it to the current spot's adjacency list...
                         if coords not in adjacent_to_current_space:
-                            adjacent_to_current_space = adjacent_to_current_space.cons(coords)
+                            adjacent_to_current_space = adjacent_to_current_space.append(coords)
                     # We're done with this space, so replace its adjacency list in [new_piece_adjacencies]...
                     new_piece_adjacencies[coords] = adjacent_coords
             # After we're done with all other spaces, we can replace the current space's adjacency list as well...
@@ -450,22 +442,22 @@ def build_structure(game_state, player, board_coords, structure_typ):
     return game_state
 
 
-def deploy_mech(game_state, player, mech_type, board_coords):
-    assert mech_type.value not in player.mech_ids
-    mk = gc_piece.mech_key(player.faction_name(), mech_type.value)
+def deploy_mech(game_state, player, mech_typ, board_coords):
+    assert mech_typ.value not in player.mech_ids
+    mk = gc_piece.mech_key(player.faction_name(), mech_typ.value)
     if logging.getLogger().isEnabledFor(logging.DEBUG):
-        logging.debug(f'{player} deploys {mech_type} mech to {board_coords} with key {mk}')
+        logging.debug(f'{player} deploys {mech_typ} mech to {board_coords} with key {mk}')
     board = game_state.board.add_piece(mk, board_coords)
     game_state = attr.evolve(game_state, board=board)
     mech = attr.evolve(game_state.pieces_by_key[mk], board_coords=board_coords)
     game_state = attr.evolve(game_state, pieces_by_key=game_state.pieces_by_key.set(mk, mech))
-    if mech_type == MechType.RIVERWALK:
+    if mech_typ == MechType.RIVERWALK:
         adjacencies = player.faction.add_riverwalk_adjacencies(player.adjacencies, game_state.board)
-    elif mech_type == MechType.TELEPORT:
+    elif mech_typ == MechType.TELEPORT:
         adjacencies = player.faction.add_teleport_adjacencies(player.adjacencies, game_state.board)
     else:
         adjacencies = player.adjacencies
-    player = attr.evolve(player, mech_ids=player.mech_ids.add(mech_type.value), adjacencies=adjacencies)
+    player = attr.evolve(player, mech_ids=player.mech_ids.add(mech_typ.value), adjacencies=adjacencies)
     game_state = set_player(game_state, player)
     if not player.has_undeployed_mechs():
         game_state = achieve(game_state, player, StarType.MECH)
@@ -541,15 +533,13 @@ def mill_space(game_state, player):
 def produceable_space_coords(game_state, player):
     coords = board_coords_with_workers(game_state, player)
     spaces = set(map(game_state.board.get_space, coords))
-    player_mill_space = mill_space(game_state, player)
-    if player_mill_space:
-        spaces.add(player_mill_space)
     to_remove = []
     for space in spaces:
         if space.produced_this_turn \
                 or space.terrain_typ is TerrainType.LAKE \
                 or space.terrain_typ is TerrainType.FACTORY \
-                or space.terrain_typ is TerrainType.VILLAGE and not player.available_workers():
+                or space.terrain_typ is TerrainType.VILLAGE and not player.available_workers()\
+                or space.has_structure() and space.structure_key.id is StructureType.MILL.value:
             to_remove.append(space)
     for space in to_remove:
         spaces.remove(space)
@@ -562,10 +552,25 @@ def adjacent_space_coords_without_enemies(game_state, piece):
     ret = []
     for adjacent_coords in adjacent_space_coords:
         adjacent_space = game_state.board.get_space(adjacent_coords)
-        space_controller = controller(game_state, adjacent_space)
-        if space_controller is None or space_controller is player.faction_name():
+        if adjacent_space.contains_no_enemy_plastic(piece.faction_name) \
+                and adjacent_space.contains_no_enemy_workers(piece.faction_name):
             ret.append(adjacent_coords)
     return ret
+
+
+def movable_pieces_debug(game_state, player):
+    for worker_id in player.worker_ids:
+        worker = game_state.pieces_by_key[gc_piece.worker_key(player.faction_name(), worker_id)]
+        if game_state.board.get_space(worker.board_coords).terrain_typ is TerrainType.LAKE:
+            print(f'{worker} is on a LAKE so can\'t move')
+        if not adjacent_space_coords_without_enemies(game_state, worker):
+            print(f'{worker} has no adjacent spaces without enemies')
+        if worker.moved_this_turn:
+            print(f'{worker} moved this turn')
+    for mech_id in player.mech_ids:
+        mech = game_state.pieces_by_key[gc_piece.mech_key(player.faction_name(), mech_id)]
+        if mech.moved_this_turn:
+            print(f'{mech} moved this turn')
 
 
 def movable_pieces(game_state, player):
@@ -586,20 +591,22 @@ def effective_adjacent_space_coords(game_state, piece_key):
     player = game_state.players_by_idx[game_state.player_idx_by_faction_name[piece.faction_name]]
     adjacent_space_coords = player.adjacencies[piece.typ][piece.board_coords]
     assert piece.board_coords not in adjacent_space_coords
+    assert isinstance(adjacent_space_coords, PVector)
     if MechType.TELEPORT.value in player.mech_ids and piece.is_plastic():
         extra_adjacent_space_coords = player.faction.extra_adjacent_space_coords(piece, game_state)
         assert piece.board_coords not in extra_adjacent_space_coords
         for coords in extra_adjacent_space_coords:
             if coords not in adjacent_space_coords:
-                adjacent_space_coords = adjacent_space_coords.cons(coords)
-        return adjacent_space_coords
+                adjacent_space_coords = adjacent_space_coords.append(coords)
+        return thaw(adjacent_space_coords)
     elif piece.is_worker():
-        return plist(adjacent_space_coords_without_enemies(game_state, piece))
+        return adjacent_space_coords_without_enemies(game_state, piece)
     else:
-        return adjacent_space_coords
+        return thaw(adjacent_space_coords)
 
 
-def end_turn(game_state, player):
+def end_turn(game_state):
+    player = get_current_player(game_state)
     if logging.getLogger().isEnabledFor(logging.DEBUG):
         logging.debug(f'{player} ends their turn')
     pieces_by_key = game_state.pieces_by_key
@@ -626,7 +633,17 @@ def end_turn(game_state, player):
         player = attr.evolve(player, faction=faction)
         game_state = set_player(game_state, player)
 
-    return attr.evolve(game_state, pieces_by_key=pieces_by_key)
+    game_state = attr.evolve(game_state, pieces_by_key=pieces_by_key)
+    board = game_state.board
+    for space_coords in game_state.spaces_produced_this_turn:
+        space = attr.evolve(board.get_space(space_coords), produced_this_turn=False)
+        board = board.set_space(space)
+    next_player_idx = game_state.current_player_idx + 1
+    if next_player_idx == len(game_state.players_by_idx):
+        next_player_idx = 0
+    game_state = attr.evolve(game_state, board=board, current_player_idx=next_player_idx,
+                             spaces_produced_this_turn=pset(), num_turns=game_state.num_turns+1)
+    return game_state
 
 
 def move_piece(game_state, piece_key, to_coords):
@@ -638,6 +655,6 @@ def move_piece(game_state, piece_key, to_coords):
     new_space = board.get_space(to_coords).add_piece(piece_key)
     piece = attr.evolve(piece, board_coords=to_coords)
     board = board.set_space(old_space).set_space(new_space)
-    pieces_by_key = game_state.pieces_by_key.set(piece_key, piece)
-    game_state = attr.evolve(game_state, board=board, pieces_by_key=pieces_by_key)
+    game_state = set_piece(game_state, piece)
+    game_state = attr.evolve(game_state, board=board)
     return game_state

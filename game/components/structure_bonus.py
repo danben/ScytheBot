@@ -13,9 +13,9 @@ def score_adjacent(board, coords, num_spaces_to_coins):
         marked = defaultdict(bool)
         for other_coords in board.base_adjacencies[c]:
             other_space = board.get_space(other_coords)
-            if other_space.structure and not marked[other_space.structure.faction_name]:
-                scores[other_space.structure.faction_name] += 1
-                marked[other_space.structure.faction_name] = True
+            if other_space.structure_key and not marked[other_space.structure_key.faction_name]:
+                scores[other_space.structure_key.faction_name] += 1
+                marked[other_space.structure_key.faction_name] = True
 
     return {faction: num_spaces_to_coins(num_spaces) for faction, num_spaces in scores.items()}
 
@@ -23,8 +23,8 @@ def score_adjacent(board, coords, num_spaces_to_coins):
 def score_on_top_of(spaces, num_spaces_to_coins):
     scores = defaultdict(int)
     for space in spaces:
-        if space.structure:
-            scores[space.structure.faction_name] += 1
+        if space.structure_key:
+            scores[space.structure_key.faction_name] += 1
 
     return {faction: num_spaces_to_coins(num_spaces) for faction, num_spaces in scores.items()}
 
@@ -113,7 +113,7 @@ def score_longest_row_of_structures(board):
 
     def count_in_a_line(space, faction, move):
         count = 0
-        while space and space.structure and space.structure.faction_name is faction:
+        while space and space.structure_key and space.structure_key.faction_name is faction:
             count += 1
             next_r, next_c = move(*space.coords)
             if bd.on_the_board(next_r, next_c) and (next_r, next_c) in board.board_spaces_by_coords:
@@ -124,8 +124,8 @@ def score_longest_row_of_structures(board):
 
     for coords in board.base_adjacencies.keys():
         space = board.get_space(coords)
-        if space and space.structure and space.terrain_typ is not TerrainType.HOME_BASE:
-            faction = space.structure.faction_name
+        if space and space.structure_key and space.terrain_typ is not TerrainType.HOME_BASE:
+            faction = space.structure_key.faction_name
             count_down_right = count_in_a_line(space, faction, bd.move_down_and_right)
             count_up_right = count_in_a_line(space, faction, bd.move_up_and_right)
             player_scores[faction] = max(player_scores[faction], count_down_right)

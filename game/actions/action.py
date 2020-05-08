@@ -45,6 +45,10 @@ class Choice(Action, ABC):
             logging.debug(self.name)
         return self.do(game_state, chosen)
 
+    @abstractmethod
+    def choices(self, game_state):
+        pass
+
 
 @attr.s(frozen=True, slots=True)
 class Boolean(Choice):
@@ -56,13 +60,13 @@ class Boolean(Choice):
         return cls(f'Choosing between {action1.name} and {action2.name}', action1, action2)
 
     def choose(self, agent, game_state):
-        return agent.choose_boolean(game_state)
+        return agent.choose_action(game_state, [self.action1, self.action2])
 
     def do(self, game_state, chosen):
-        if chosen:
-            return sc.push_action(game_state, self.action1)
-        else:
-            return sc.push_action(game_state, self.action2)
+        return sc.push_action(game_state, chosen)
+
+    def choices(self, game_state):
+        return [self.action1, self.action2]
 
 
 @attr.s(frozen=True, slots=True)
@@ -84,6 +88,10 @@ class Optional(Choice):
             logging.debug('Decided not to')
             return game_state
 
+    def choices(self, game_state):
+        return [False, True]
+
+
 
 @attr.s(frozen=True, slots=True)
 class EndGame(StateChange):
@@ -92,7 +100,7 @@ class EndGame(StateChange):
         return cls('End game')
 
     def do(self, game_state):
-        raise GameOver(None)
+        raise GameOver(game_state)
 
 
 @attr.s(frozen=True, slots=True)
@@ -102,6 +110,9 @@ class MaybePayCost(Choice, ABC):
     @abstractmethod
     def cost(self, game_state):
         pass
+
+    def choices(self, game_state):
+        return [False, True]
 
     def choose(self, agent, game_state):
         if self.cost(game_state).is_free():
@@ -121,7 +132,7 @@ class MaybePayCost(Choice, ABC):
             else:
                 game_state = sc.push_action(game_state, CrimeaMaybeChooseResource.new(cost))
         else:
-            logging.debug('Skipping; decided not to pay')
+            logging.debug('Skipping; decided not to pay or could not pay')
 
         return game_state
 
@@ -135,11 +146,14 @@ class SpendAResource(Choice):
     def new(cls, player_id, resource_typ):
         return cls(f'Choose {resource_typ} to spend', player_id, resource_typ)
 
-    def choose(self, agent, game_state):
+    def choices(self, game_state):
         eligible_spaces = sc.controlled_spaces_with_resource(game_state,
                                                              sc.get_player_by_idx(game_state, self.player_id),
                                                              self.resource_typ)
-        return agent.choose_board_coords(game_state, list(map(lambda x: x.coords, eligible_spaces)))
+        return list(map(lambda x: x.coords, eligible_spaces))
+
+    def choose(self, agent, game_state):
+        return agent.choose_board_coords(game_state, self.choices(game_state))
 
     def do(self, game_state, chosen):
         if logging.getLogger().isEnabledFor(logging.DEBUG):
@@ -159,8 +173,11 @@ class CrimeaMaybeChooseResource(Choice):
     def new(cls, cost):
         return cls('Crimea can choose to substitute a combat card for a resource', cost)
 
+    def choices(self, game_state):
+        return sc.get_current_player(game_state).owned_resource_typs()
+
     def choose(self, agent, game_state):
-        return agent.choose_optional_resource_type_for_cost_substitution(game_state, self.cost)
+        return agent.choose_optional_resource_typ(game_state, self.choices(game_state))
 
     def do(self, game_state, chosen):
         if chosen:
@@ -202,7 +219,7 @@ class Cost:
         return ''.join(strings)
 
     @staticmethod
-    def of_resource_type(resource_typ, amt):
+    def of_resource_typ(resource_typ, amt):
         if resource_typ is ResourceType.METAL:
             return Cost.new(metal=amt)
         elif resource_typ is ResourceType.FOOD:
@@ -272,7 +289,7 @@ class BottomActionIfPaid(StateChange):
             if self.enlisted:
                 game_state = sc.give_reward_to_player(game_state, current_player, self.enlist_benefit, 1)
         except GameOver as e:
-            game_state = sc.set_player(game_state, e.player)
+            game_state = e.game_state
             game_state = sc.push_action(game_state, EndGame.new())
         finally:
             if sc.can_legally_receive_action_benefit(game_state, current_player, self.bottom_action_typ):
@@ -285,19 +302,19 @@ class BottomActionIfPaid(StateChange):
 
 @attr.s(frozen=True, slots=True)
 class BottomAction(MaybePayCost):
-    current_cost = attr.ib()  # maxcost
+    current_cost = attr.ib()  # max cost
     mincost = attr.ib()
-    resource_type = attr.ib()
+    resource_typ = attr.ib()
     bottom_action_typ = attr.ib()
 
     @classmethod
-    def new(cls, bottom_action_typ, resource_type, maxcost, mincost, coins_payoff, enlist_benefit,
+    def new(cls, bottom_action_typ, resource_typ, maxcost, mincost, coins_payoff, enlist_benefit,
             action_benefit):
         if_paid = BottomActionIfPaid.new(bottom_action_typ, coins_payoff, enlist_benefit, action_benefit)
-        return cls(bottom_action_typ.__str__(), if_paid, maxcost, mincost, resource_type, bottom_action_typ)
+        return cls(bottom_action_typ.__str__(), if_paid, maxcost, mincost, resource_typ, bottom_action_typ)
 
     def cost(self, game_state):
-        return Cost.of_resource_type(self.resource_type, self.current_cost)
+        return Cost.of_resource_typ(self.resource_typ, self.current_cost)
 
     def is_upgradeable(self):
         return self.current_cost > self.mincost
@@ -305,12 +322,6 @@ class BottomAction(MaybePayCost):
     def upgrade(self):
         assert self.current_cost > self.mincost
         return attr.evolve(self, current_cost=self.current_cost - 1)
-
-    # def enlist(self):
-    #     return attr.evolve(self, if_paid=attr.evolve(self.if_paid, enlisted=True))
-    #
-    # def has_enlisted(self):
-    #     return self.if_paid.enlisted
 
 
 @attr.s(frozen=True, slots=True)
@@ -320,7 +331,7 @@ class ReceiveBenefit(StateChange):
 
     @classmethod
     def new(cls, typ, amt):
-        return cls('Current player gets {amt} {typ}', typ, amt)
+        return cls(f'Current player gets {amt} {typ}', typ, amt)
 
     def do(self, game_state):
         return sc.give_reward_to_player(game_state, sc.get_current_player(game_state), self.typ, self.amt)

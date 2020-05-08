@@ -4,7 +4,7 @@ from game.constants import MAX_COMBAT_POWER
 from game.types import FactionName, StarType
 
 import attr
-
+import logging
 
 @attr.s(frozen=True, slots=True)
 class ResolveCombat(a.StateChange):
@@ -21,10 +21,12 @@ class ResolveCombat(a.StateChange):
                    defender_total_power)
 
     def do(self, game_state):
-        sc.change_turn(game_state, self.attacking_faction_name)
+        game_state = sc.change_turn(game_state, self.attacking_faction_name)
         winner, loser = (self.attacking_faction_name, self.defending_faction_name) \
             if self.attacker_total_power >= self.defender_total_power \
             else (self.defending_faction_name, self.attacking_faction_name)
+        if logging.getLogger().isEnabledFor(logging.DEBUG):
+            logging.debug(f'{winner} defeats {loser}')
         space = game_state.board.get_space(self.board_coords)
         loser_home_base_coords = game_state.board.home_base(loser).coords
         winning_player = sc.get_player_by_faction_name(game_state, winner)
@@ -52,8 +54,11 @@ class GetDefenderCombatCards(a.Choice):
         return cls('Defender commits combat cards', board_coords, attacking_faction_name, defending_faction_name,
                    attacker_total_power, defender_total_power, num_combat_cards)
 
+    def choices(self, game_state):
+        return sc.get_current_player(game_state).available_combat_cards()
+
     def choose(self, agent, game_state):
-        return agent.choose_optional_combat_card(game_state)
+        return agent.choose_optional_combat_card(game_state, self.choices(game_state))
 
     def do(self, game_state, card):
         if card:
@@ -83,9 +88,12 @@ class GetDefenderWheelPower(a.Choice):
         return cls('Defender commits wheel power', board_coords, attacking_faction_name, defending_faction_name,
                    attacker_total_power)
 
-    def choose(self, agent, game_state):
+    def choices(self, game_state):
         defending_player = sc.get_player_by_faction_name(game_state, self.defending_faction_name)
-        return agent.choose_numeric(game_state, 0, min(MAX_COMBAT_POWER, defending_player.power))
+        return list(range(min(MAX_COMBAT_POWER, defending_player.power)+1))
+
+    def choose(self, agent, game_state):
+        return agent.choose_numeric(game_state, self.choices(game_state))
 
     def do(self, game_state, power):
         game_state = sc.remove_power(game_state, sc.get_player_by_faction_name(game_state, self.defending_faction_name),
@@ -123,8 +131,11 @@ class GetAttackerCombatCards(a.Choice):
         return cls('Attacker commits combat cards', board_coords, attacking_faction_name, defending_faction_name,
                    attacker_total_power, num_combat_cards)
 
+    def choices(self, game_state):
+        return sc.get_current_player(game_state).available_combat_cards()
+
     def choose(self, agent, game_state):
-        return agent.choose_optional_combat_card(game_state)
+        return agent.choose_optional_combat_card(game_state, self.choices(game_state))
 
     def do(self, game_state, card):
         if card:
@@ -152,9 +163,12 @@ class GetAttackerWheelPower(a.Choice):
     def new(cls, board_coords, attacking_faction_name, defending_faction_name):
         return cls('Attacker commits wheel power', board_coords, attacking_faction_name, defending_faction_name)
 
-    def choose(self, agent, game_state):
+    def choices(self, game_state):
         attacking_player = sc.get_player_by_faction_name(game_state, self.attacking_faction_name)
-        return agent.choose_numeric(game_state, 0, min(MAX_COMBAT_POWER, attacking_player.power))
+        return list(range(min(MAX_COMBAT_POWER, attacking_player.power)+1))
+
+    def choose(self, agent, game_state):
+        return agent.choose_numeric(game_state, self.choices(game_state))
 
     def do(self, game_state, power):
         game_state = sc.remove_power(game_state, sc.get_player_by_faction_name(game_state, self.attacking_faction_name),
@@ -187,6 +201,9 @@ class NordicMaybeUseCombatPower(a.Choice):
     def new(cls, nordic_faction_name, not_nordic_faction_name, attacking_faction_name):
         return cls('Nordic decides whether to use its combat power', attacking_faction_name, nordic_faction_name,
                    not_nordic_faction_name)
+
+    def choices(self, game_state):
+        return [False, True]
 
     def choose(self, agent, game_state):
         return agent.choose_boolean(game_state)
@@ -239,8 +256,9 @@ class Combat(a.StateChange):
             nordic, not_nordic = (attacking_player, defending_player) \
                 if self.attacking_faction_name is FactionName.NORDIC else (defending_player, attacking_player)
             if nordic.power():
+                game_state = sc.change_turn(game_state, FactionName.NORDIC)
                 game_state = sc.push_action(game_state,
-                                            NordicMaybeUseCombatPower.new(nordic.faction_name(),
+                                            NordicMaybeUseCombatPower.new(FactionName.NORDIC,
                                                                           not_nordic.faction_name(),
                                                                           self.attacking_faction_name))
         return game_state

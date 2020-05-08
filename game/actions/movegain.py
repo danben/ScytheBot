@@ -16,10 +16,13 @@ class LoadResources(a.Choice):
     def new(cls, piece_key, resource_typ):
         return cls(f'Maybe load some {resource_typ} onto {piece_key}', piece_key, resource_typ)
 
-    def choose(self, agent, game_state):
+    def choices(self, game_state):
         piece = game_state.pieces_by_key[self.piece_key]
         amt = game_state.board.get_space(piece.board_coords).amount_of(self.resource_typ)
-        return agent.choose_numeric(game_state, 0, amt)
+        return list(range(amt+1))
+
+    def choose(self, agent, game_state):
+        return agent.choose_numeric(game_state, self.choices(game_state))
 
     def do(self, game_state, amt):
         if amt:
@@ -40,28 +43,30 @@ class LoadWorkers(a.Choice):
     def new(cls, mech_key):
         return cls(f'Load workers onto {mech_key}', mech_key)
 
-    def choose(self, agent, game_state):
+    def choices(self, game_state):
         board_coords = sc.get_board_coords_for_piece_key(game_state, self.mech_key)
         space = game_state.board.get_space(board_coords)
-        max_workers = len(space.worker_keys)
-        if logging.getLogger().isEnabledFor(logging.DEBUG):
-            logging.debug(f'Can choose up to {max_workers} workers from space {space}')
-        return agent.choose_numeric(game_state, 0, max_workers)
+        return list(range(len(space.worker_keys)+1))
+
+    def choose(self, agent, game_state):
+        return agent.choose_numeric(game_state, self.choices(game_state))
 
     def do(self, game_state, amt):
+        if not amt:
+            if logging.getLogger().isEnabledFor(logging.DEBUG):
+                logging.debug(f'Chose not to load any workers')
+            return game_state
+        added = 0
         mech = game_state.pieces_by_key[self.mech_key]
         board_space = game_state.board.get_space(mech.board_coords)
-        if amt:
-            added = 0
-            if logging.getLogger().isEnabledFor(logging.DEBUG):
-                logging.debug(f'Load {amt} workers from {board_space}')
-            for worker_key in board_space.worker_keys:
-                mech = attr.evolve(mech, carrying_worker_keys=mech.carrying_worker_keys.add(worker_key))
-                added += 1
-                if added == amt:
-                    return sc.set_piece(game_state, mech)
-            assert False
-        return game_state
+        if logging.getLogger().isEnabledFor(logging.DEBUG):
+            logging.debug(f'Load {amt} workers from {board_space}')
+        for worker_key in board_space.worker_keys:
+            mech = attr.evolve(mech, carrying_worker_keys=mech.carrying_worker_keys.add(worker_key))
+            added += 1
+            if added == amt:
+                return sc.set_piece(game_state, mech)
+        assert False
 
 
 @attr.s(frozen=True, slots=True)
@@ -92,20 +97,23 @@ class MovePieceToSpaceAndDropCarryables(a.StateChange):
         piece = game_state.pieces_by_key[self.piece_key]
         assert piece.board_coords != self.board_coords
         new_space = game_state.board.get_space(self.board_coords)
+        assert (not piece.is_worker()) or new_space.contains_no_enemy_workers(piece.faction_name)
         controller_of_new_space = sc.controller(game_state, new_space)
         current_player = sc.get_current_player(game_state)
         current_player_faction = current_player.faction_name()
         if controller_of_new_space and controller_of_new_space is not current_player_faction:
-            piece = attr.evolve(piece, moved_into_enemy_territory_this_turn=True)
-            game_state = sc.set_piece(game_state, piece)
+            if not new_space.controlled_by_structure():
+                piece = attr.evolve(piece, moved_into_enemy_territory_this_turn=True)
+                game_state = sc.set_piece(game_state, piece)
             if logging.getLogger().isEnabledFor(logging.DEBUG):
-                logging.debug(f'{current_player_faction} moved a piece into enemy territory'
+                logging.debug(f'{current_player_faction} moved {piece} into enemy territory ({new_space})'
                               f' controlled by {controller_of_new_space}')
+                logging.debug(f'{new_space!r}')
             if piece.is_plastic() and new_space.contains_no_enemy_plastic(current_player_faction):
                 to_scare = set()
                 for worker_key in new_space.worker_keys:
-                    if worker_key.faction_name is not current_player_faction:
-                        to_scare.add(worker_key)
+                    assert worker_key.faction_name is not current_player_faction
+                    to_scare.add(worker_key)
 
                 for worker_key in to_scare:
                     if logging.getLogger().isEnabledFor(logging.DEBUG):
@@ -114,7 +122,6 @@ class MovePieceToSpaceAndDropCarryables(a.StateChange):
                                                game_state.board.home_base(worker_key.faction_name).coords)
 
                 game_state = sc.remove_popularity(game_state, sc.get_current_player(game_state), len(to_scare))
-
         old_space = game_state.board.get_space(piece.board_coords)
         new_space = game_state.board.get_space(self.board_coords)
         for resource_typ in ResourceType:
@@ -136,14 +143,12 @@ class MovePieceToSpaceAndDropCarryables(a.StateChange):
                 old_worker_keys = old_worker_keys.remove(worker_key)
             new_space = attr.evolve(new_space, worker_keys=new_worker_keys)
             old_space = attr.evolve(old_space, worker_keys=old_worker_keys)
-
         board = game_state.board.set_space(new_space).set_space(old_space)
         game_state = attr.evolve(game_state, board=board)
         piece = attr.evolve(piece, moved_this_turn=True)
         piece = piece.drop_everything()
         game_state = sc.set_piece(game_state, piece)
-        game_state = sc.move_piece(game_state, piece.key(), self.board_coords)
-        return game_state
+        return sc.move_piece(game_state, piece.key(), self.board_coords)
 
 
 @attr.s(frozen=True, slots=True)
@@ -154,8 +159,11 @@ class MovePieceOneSpace(a.Choice):
     def new(cls, piece_key):
         return cls(f'Move {piece_key} one space', piece_key)
 
+    def choices(self, game_state):
+        return sc.effective_adjacent_space_coords(game_state, self.piece_key)
+
     def choose(self, agent, game_state):
-        effective_adjacent_space_coords = sc.effective_adjacent_space_coords(game_state, self.piece_key)
+        effective_adjacent_space_coords = self.choices(game_state)
         if logging.getLogger().isEnabledFor(logging.DEBUG):
             logging.debug(f'Choosing from {effective_adjacent_space_coords}')
         assert game_state.pieces_by_key[self.piece_key].board_coords not in effective_adjacent_space_coords
@@ -177,14 +185,14 @@ class LoadAndMovePiece(a.StateChange):
 
     def do(self, game_state):
         piece = game_state.pieces_by_key[self.piece_key]
-        cur_space = game_state.board.get_space(piece.board_coords)
-        assert self.piece_key in cur_space.all_piece_keys()
         # This is how we "short-circuit" the move action if a piece walked into an enemy-controlled
         # territory.
         if piece.moved_into_enemy_territory_this_turn:
             return game_state
-
+        cur_space = game_state.board.get_space(piece.board_coords)
+        assert self.piece_key in cur_space.all_piece_keys()
         assert piece.not_carrying_anything()
+        assert not piece.moved_into_enemy_territory_this_turn
         game_state = sc.push_action(game_state, MovePieceOneSpace.new(self.piece_key))
         for r in ResourceType:
             if cur_space.amount_of(r):
@@ -209,24 +217,33 @@ class MoveOnePiece(a.Choice):
     def new(cls):
         return cls('Move one piece')
 
-    def choose(self, agent, game_state):
+    def choices(self, game_state):
         # Here we don't let someone pick a piece if it happens to be a worker that was dropped into
         # enemy territory this turn. That would get around the [moved_this_turn] check, so we explicitly
         # check to see that we're not starting in enemy territory. There would be no legal way for a mech
         # or character to start in enemy territory anyway.
         current_player = sc.get_current_player(game_state)
-        movable_pieces = [piece for piece in sc.movable_pieces(game_state, current_player)
-                          if sc.controller(game_state, game_state.board.get_space(piece.board_coords))
-                          is current_player.faction_name()]
+        return [piece for piece in sc.movable_pieces(game_state, current_player)
+                if sc.controller(game_state, game_state.board.get_space(piece.board_coords))
+                is current_player.faction_name()]
+
+
+    def choose(self, agent, game_state):
+        movable_pieces = self.choices(game_state)
         if logging.getLogger().isEnabledFor(logging.DEBUG):
             logging.debug(f'Choosing a piece from {"; ".join([str(piece) for piece in movable_pieces])}')
+        if not movable_pieces:
+            return None
         return agent.choose_piece(game_state, movable_pieces)
 
     def do(self, game_state, piece):
+        if not piece:
+            logging.debug('No movable pieces')
+            return game_state
         if logging.getLogger().isEnabledFor(logging.DEBUG):
             logging.debug(f'Chosen: {piece}')
         piece_key = piece.key()
-        for _ in range(sc.get_current_player(game_state).base_move_for_piece_type(piece.typ) - 1):
+        for _ in range(sc.get_current_player(game_state).base_move_for_piece_typ(piece.typ) - 1):
             game_state = sc.push_action(game_state, a.Optional.new(LoadAndMovePiece.new(piece_key)))
         return sc.push_action(game_state, LoadAndMovePiece.new(piece_key))
 

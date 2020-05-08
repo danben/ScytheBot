@@ -44,7 +44,7 @@ class Faction:
                     space = board.get_space(coords)
                     other_space = board.get_space(other_coords)
                     if should_add(space, other_space):
-                        adjacent_coords = adjacent_coords.cons(other_coords)
+                        adjacent_coords = adjacent_coords.append(other_coords)
             piece_adjacencies = piece_adjacencies.set(coords, adjacent_coords)
         player_adjacencies = player_adjacencies.set(piece_typ, piece_adjacencies)
         return player_adjacencies
@@ -55,7 +55,7 @@ class Faction:
         for space, adjacent_spaces in piece_adjacencies.items():
             for other_space in piece_adjacencies.keys():
                 if space is not other_space and should_add(space, other_space) and other_space not in adjacent_spaces:
-                    adjacent_spaces = adjacent_spaces.cons(other_space)
+                    adjacent_spaces = adjacent_spaces.append(other_space)
             piece_adjacencies = piece_adjacencies.set(space, adjacent_spaces)
         player_adjacencies = player_adjacencies.set(piece_typ, piece_adjacencies)
         return player_adjacencies
@@ -145,10 +145,10 @@ class Crimea(Faction):
             # Move from any territory or home base to either an inactive home base or my own
             for space, adjacent_spaces in player_adjacencies_for_piece_typ.items():
                 if my_home_base not in adjacent_spaces:
-                    adjacent_spaces = adjacent_spaces.cons(my_home_base)
+                    adjacent_spaces = adjacent_spaces.append(my_home_base)
                 for inactive_home_base in board.inactive_home_bases:
                     if inactive_home_base not in adjacent_spaces:
-                        adjacent_spaces = adjacent_spaces.cons(inactive_home_base)
+                        adjacent_spaces = adjacent_spaces.append(inactive_home_base)
                 player_adjacencies_for_piece_typ = player_adjacencies_for_piece_typ.set(space, adjacent_spaces)
             player_adjacencies = player_adjacencies.set(piece_typ, player_adjacencies_for_piece_typ)
         return player_adjacencies

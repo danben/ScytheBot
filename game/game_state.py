@@ -4,6 +4,8 @@ import game.components.player_mat as gc_player_mat
 import game.components.piece as gc_piece
 import game.components.structure_bonus as gc_structure_bonus
 import game.state_change as sc
+from game.actions.action import Choice
+from game.actions.take_turn import TakeTurn
 from game.faction import choose as choose_faction
 from game.player import Player
 from game.types import PieceType, StructureType
@@ -20,9 +22,12 @@ class GameState:
     players_by_idx = attr.ib()
     player_idx_by_faction_name = attr.ib()
     pieces_by_key = attr.ib()
-    action_stack = attr.ib(default=plist())
+    action_stack = attr.ib(default=plist([TakeTurn()]))
     current_player_idx = attr.ib(default=0)
     spaces_produced_this_turn = attr.ib(default=pset())
+    winner = attr.ib(default=None)
+    player_scores = attr.ib(default=None)
+    num_turns = attr.ib(default=0)
 
     @classmethod
     def from_num_players(cls, num_players):
@@ -70,8 +75,8 @@ class GameState:
 
         players_by_idx = pmap(players_by_idx)
         pieces_by_key = pmap(pieces_by_key)
-        structure_bonus = gc_structure_bonus.StructureBonus.random()
-        game_state = cls(board, structure_bonus, combat_cards, players_by_idx, player_idx_by_faction_name, pieces_by_key)
+        game_state = cls(board, gc_structure_bonus.StructureBonus.random(), combat_cards, players_by_idx,
+                         player_idx_by_faction_name, pieces_by_key)
         for i in range(num_players):
             player = game_state.players_by_idx[i]
             spaces_adjacent_to_home_base = board.adjacencies_accounting_for_rivers_and_lakes[player.home_base]
@@ -81,4 +86,9 @@ class GameState:
                 player = game_state.players_by_idx[i]
         return game_state
 
+    def is_over(self):
+        return self.winner is not None
 
+    def legal_moves(self):
+        assert len(self.action_stack) and isinstance(self.action_stack.first, Choice)
+        return self.action_stack.first.choices(self)
