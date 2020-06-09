@@ -1,5 +1,5 @@
 import game.state_change as sc
-from game.actions.action import BottomAction, Choice
+from game.actions import BottomAction, Choice
 from game.types import Benefit, BottomActionType, ResourceType
 
 import attr

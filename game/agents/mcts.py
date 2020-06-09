@@ -5,7 +5,8 @@ import game.state_change as sc
 
 import math
 import random
-import time
+
+from game.actions.produce import OnOneHex
 
 
 def uct_score(parent_rollouts, child_rollouts, win_pct, temperature):
@@ -16,9 +17,6 @@ def uct_score(parent_rollouts, child_rollouts, win_pct, temperature):
 class MCTSNode:
     def __init__(self, game_state, players, parent=None, move=None, unvisited_moves=None):
         uvmoves = game_state.legal_moves() if not unvisited_moves else unvisited_moves
-        if not uvmoves:
-            print(game_state.action_stack.first)
-            assert False
         self.game_state = game_state
         self.parent = parent
         self.move = move
@@ -32,8 +30,7 @@ class MCTSNode:
         new_move = self.unvisited_moves.pop(index)
         new_game_state = play.apply_move(self.game_state, new_move)
         while not new_game_state.legal_moves():
-            print(f'Action with no choices: {new_game_state.action_stack.first}')
-            new_game_state = play.apply_move(self.game_state, None)
+            new_game_state = play.apply_move(new_game_state, None)
         new_node = MCTSNode(new_game_state, self.win_counts.keys(), parent=self, move=new_move)
         self.children.append(new_node)
         return new_node
@@ -76,11 +73,6 @@ class MCTSAgent(Agent):
             return None
         if len(choices) == 1:
             return choices[0]
-        if not isinstance(choices, list):
-            print(choices)
-            assert False
-        if not choices:
-            assert False
         root = MCTSNode(game_state, self.players, unvisited_moves=choices)
         for i in range(self.num_rounds):
             node = root
@@ -110,13 +102,6 @@ class MCTSAgent(Agent):
     def select_child(self, node):
         best_score = 0
         best_child = None
-        if not node.children:
-            print(node.game_state.action_stack.first)
-            print(node)
-            assert False
-        if not isinstance(node.children, list):
-            print(node.children)
-            assert False
         for child in node.children:
             score = uct_score(node.num_rollouts, child.num_rollouts,
                               child.winning_frac(sc.get_current_player(node.game_state).faction_name()),
@@ -124,11 +109,6 @@ class MCTSAgent(Agent):
             if score > best_score:
                 best_score = score
                 best_child = child
-
-        if not (best_child and isinstance(node.children, list)):
-            print(node.children)
-            print(best_child)
-            assert False
         return best_child
 
     def choose_action(self, game_state, choices):

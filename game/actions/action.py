@@ -92,7 +92,6 @@ class Optional(Choice):
         return [False, True]
 
 
-
 @attr.s(frozen=True, slots=True)
 class EndGame(StateChange):
     @classmethod
@@ -187,11 +186,6 @@ class CrimeaMaybeChooseResource(Choice):
         else:
             game_state = sc.charge_player(game_state, sc.get_current_player(game_state), self.cost)
         return game_state
-
-
-@attr.s(frozen=True, slots=True)
-class TopAction:
-    top_action_typ = attr.ib()
 
 
 @attr.s(frozen=True, slots=True)

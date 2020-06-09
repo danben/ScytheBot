@@ -1,6 +1,5 @@
 from game.agents import Agent
-from game.types import ResourceType, StructureType
-import game.state_change as sc
+from game.types import ResourceType
 
 import logging
 import numpy as np

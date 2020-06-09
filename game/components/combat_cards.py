@@ -10,6 +10,7 @@ def build_deck():
     return pvector(deck)
 
 
+# TODO: discard pile can be a map rather than a list
 @attr.s(frozen=True, slots=True)
 class CombatCards:
     deck = attr.ib(factory=build_deck)

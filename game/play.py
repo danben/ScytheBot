@@ -1,4 +1,4 @@
-from game.actions import action
+from game.actions import Choice, MaybePayCost, StateChange
 from game.actions.take_turn import TakeTurn
 from game.exceptions import GameOver
 import game.state_change as sc
@@ -29,10 +29,10 @@ def finalize(game_state):
 def apply_move(game_state, move):
     try:
         game_state, next_action = sc.pop_action(game_state)
-        assert isinstance(next_action, action.Choice)
+        assert isinstance(next_action, Choice)
         game_state = next_action.apply(game_state, move)
         tt = TakeTurn()
-        while game_state.action_stack and isinstance(game_state.action_stack.first, action.StateChange):
+        while game_state.action_stack and isinstance(game_state.action_stack.first, StateChange):
             # get_current_player(game_state).invariant(game_state)
             game_state, next_action = sc.pop_action(game_state)
             game_state = next_action.apply(game_state)
@@ -42,7 +42,7 @@ def apply_move(game_state, move):
             if game_state.num_turns == 50:
                 # logging.info("50 turns without a winner")
                 return finalize(game_state)
-        elif isinstance(game_state.action_stack.first, action.MaybePayCost) and \
+        elif isinstance(game_state.action_stack.first, MaybePayCost) and \
                 not sc.can_pay_cost(game_state, sc.get_current_player(game_state),
                                     game_state.action_stack.first.cost(game_state)):
             if logging.getLogger().isEnabledFor(logging.DEBUG):

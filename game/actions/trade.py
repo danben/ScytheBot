@@ -1,12 +1,12 @@
-import game.actions.action as a
 import game.state_change as sc
+from game.actions import Boolean, Choice, Cost, MaybePayCost, ReceiveBenefit, StateChange
 from game.types import Benefit, ResourceType, TopActionType
 
 import attr
 
 
 @attr.s(frozen=True, slots=True)
-class ChooseBoardSpaceForResource(a.Choice):
+class ChooseBoardSpaceForResource(Choice):
     resource_typ = attr.ib()
 
     @classmethod
@@ -26,7 +26,7 @@ class ChooseBoardSpaceForResource(a.Choice):
 
 
 @attr.s(frozen=True, slots=True)
-class ChooseResourceType(a.Choice):
+class ChooseResourceType(Choice):
     @classmethod
     def new(cls):
         return cls('Choose resource type')
@@ -42,7 +42,7 @@ class ChooseResourceType(a.Choice):
 
 
 @attr.s(frozen=True, slots=True)
-class GainResources(a.StateChange):
+class GainResources(StateChange):
     _choose_resource_typ = ChooseResourceType.new()
 
     @classmethod
@@ -55,7 +55,7 @@ class GainResources(a.StateChange):
 
 
 @attr.s(frozen=True, slots=True)
-class GainPopularity(a.StateChange):
+class GainPopularity(StateChange):
     @classmethod
     def new(cls):
         return cls('Gain popularity for Trade action')
@@ -70,9 +70,9 @@ class GainPopularity(a.StateChange):
 
 
 @attr.s(frozen=True, slots=True)
-class TradeIfPaid(a.StateChange):
+class TradeIfPaid(StateChange):
     gain_popularity = GainPopularity.new()
-    resources_vs_popularity = a.Boolean.new(GainResources.new(), gain_popularity)
+    resources_vs_popularity = Boolean.new(GainResources.new(), gain_popularity)
 
     @classmethod
     def new(cls):
@@ -80,7 +80,7 @@ class TradeIfPaid(a.StateChange):
 
     def do(self, game_state):
         if sc.get_current_player(game_state).structure_is_built(TopActionType.TRADE):
-            game_state = sc.push_action(game_state, a.ReceiveBenefit.new(Benefit.POWER, amt=1))
+            game_state = sc.push_action(game_state, ReceiveBenefit.new(Benefit.POWER, amt=1))
         if sc.board_coords_with_workers(game_state, sc.get_current_player(game_state)):
             return sc.push_action(game_state, TradeIfPaid.resources_vs_popularity)
         else:
@@ -88,7 +88,7 @@ class TradeIfPaid(a.StateChange):
 
 
 @attr.s(frozen=True, slots=True)
-class Trade(a.MaybePayCost):
+class Trade(MaybePayCost):
     _if_paid = TradeIfPaid.new()
 
     @classmethod
@@ -96,7 +96,7 @@ class Trade(a.MaybePayCost):
         return cls('Trade', Trade._if_paid)
 
     def cost(self, game_state):
-        return a.Cost.new(coins=1)
+        return Cost.new(coins=1)
 
 
 def action():

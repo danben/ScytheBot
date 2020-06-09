@@ -42,10 +42,10 @@ class BottomActionType(Enum):
 
 
 class TopActionType(Enum):
-    MOVEGAIN = 0
-    BOLSTER = 1
-    PRODUCE = 2
-    TRADE = 3
+    MOVEGAIN = 1
+    BOLSTER = 2
+    PRODUCE = 3
+    TRADE = 4
 
 
 class FactionName(Enum):
@@ -102,10 +102,10 @@ class PieceType(Enum):
 
 
 class MechType(Enum):
-    RIVERWALK = 0
-    TELEPORT = 1
-    COMBAT = 2
-    SPEED = 3
+    RIVERWALK = 1
+    TELEPORT = 2
+    COMBAT = 3
+    SPEED = 4
 
 
 class StructureType(Enum):

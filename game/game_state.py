@@ -11,7 +11,7 @@ from game.player import Player
 from game.types import PieceType, StructureType
 
 import attr
-from pyrsistent import plist, pmap, pset
+from pyrsistent import plist, pmap, pset, pvector
 
 
 @attr.s(slots=True, frozen=True)
@@ -48,7 +48,7 @@ class GameState:
                 ctor = gc_piece.Character
             for faction in factions:
                 for i in range(piece_typ.num_pieces()):
-                    new_piece = ctor(None, faction.name, i)
+                    new_piece = ctor(None, faction.name, i+1)
                     pieces_by_key[new_piece.key()] = new_piece
 
         for faction in factions:
@@ -63,17 +63,17 @@ class GameState:
             board = board.add_piece(key, coords)
             return board
 
-        players_by_idx = {}
+        players_by_idx = []
         player_idx_by_faction_name = {}
         for i in range(num_players):
             faction = factions[i]
             combat_cards, starting_combat_cards = combat_cards.draw(faction.starting_combat_cards)
             player = Player.new(i, faction, player_mat_names[i], board, starting_combat_cards)
             player_idx_by_faction_name[faction.name] = i
-            board = add_piece_for_player(player, board, PieceType.CHARACTER, 0, player.home_base)
-            players_by_idx[i] = player
+            board = add_piece_for_player(player, board, PieceType.CHARACTER, 1, player.home_base)
+            players_by_idx.append(player)
 
-        players_by_idx = pmap(players_by_idx)
+        players_by_idx = pvector(players_by_idx)
         pieces_by_key = pmap(pieces_by_key)
         game_state = cls(board, gc_structure_bonus.StructureBonus.random(), combat_cards, players_by_idx,
                          player_idx_by_faction_name, pieces_by_key)

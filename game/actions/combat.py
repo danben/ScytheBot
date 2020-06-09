@@ -1,13 +1,14 @@
-import game.actions.action as a
 import game.state_change as sc
+from game.actions import Choice, StateChange
 from game.constants import MAX_COMBAT_POWER
 from game.types import FactionName, StarType
 
 import attr
 import logging
 
+
 @attr.s(frozen=True, slots=True)
-class ResolveCombat(a.StateChange):
+class ResolveCombat(StateChange):
     board_coords = attr.ib()
     attacking_faction_name = attr.ib()
     defending_faction_name = attr.ib()
@@ -40,7 +41,7 @@ class ResolveCombat(a.StateChange):
 
 
 @attr.s(frozen=True, slots=True)
-class GetDefenderCombatCards(a.Choice):
+class GetDefenderCombatCards(Choice):
     board_coords = attr.ib()
     attacking_faction_name = attr.ib()
     defending_faction_name = attr.ib()
@@ -77,7 +78,7 @@ class GetDefenderCombatCards(a.Choice):
 
 
 @attr.s(frozen=True, slots=True)
-class GetDefenderWheelPower(a.Choice):
+class GetDefenderWheelPower(Choice):
     board_coords = attr.ib()
     attacking_faction_name = attr.ib()
     defending_faction_name = attr.ib()
@@ -118,7 +119,7 @@ class GetDefenderWheelPower(a.Choice):
 
 
 @attr.s(frozen=True, slots=True)
-class GetAttackerCombatCards(a.Choice):
+class GetAttackerCombatCards(Choice):
     board_coords = attr.ib()
     attacking_faction_name = attr.ib()
     defending_faction_name = attr.ib()
@@ -154,7 +155,7 @@ class GetAttackerCombatCards(a.Choice):
 
 
 @attr.s(frozen=True, slots=True)
-class GetAttackerWheelPower(a.Choice):
+class GetAttackerWheelPower(Choice):
     board_coords = attr.ib()
     attacking_faction_name = attr.ib()
     defending_faction_name = attr.ib()
@@ -192,7 +193,7 @@ class GetAttackerWheelPower(a.Choice):
 
 
 @attr.s(frozen=True, slots=True)
-class NordicMaybeUseCombatPower(a.Choice):
+class NordicMaybeUseCombatPower(Choice):
     nordic_faction_name = attr.ib()
     not_nordic_faction_name = attr.ib()
     attacking_faction_name = attr.ib()
@@ -219,7 +220,7 @@ class NordicMaybeUseCombatPower(a.Choice):
 
 
 @attr.s(frozen=True, slots=True)
-class Combat(a.StateChange):
+class Combat(StateChange):
     board_coords = attr.ib()
     attacking_faction_name = attr.ib()
     defending_faction_name = attr.ib()
@@ -265,7 +266,7 @@ class Combat(a.StateChange):
 
 
 @attr.s(frozen=True, slots=True)
-class MaybeCombat(a.StateChange):
+class MaybeCombat(StateChange):
     @classmethod
     def new(cls):
         return cls('Check for combat')

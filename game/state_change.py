@@ -1,6 +1,5 @@
 import game.actions.action as action
 import game.components.piece as gc_piece
-import game.components.structure_bonus as gc_structure_bonus
 import game.constants as constants
 from game.exceptions import GameOver
 from game.types import Benefit, BottomActionType, FactionName, MechType, PieceType, ResourceType, StarType, \
@@ -359,12 +358,11 @@ def achieve(game_state, player, star_typ):
 
 
 def add_workers(game_state, player, coords, amt):
-    max_worker_id = max(player.worker_ids) if player.worker_ids else -1
+    max_worker_id = max(player.worker_ids) if player.worker_ids else 0
     if max_worker_id is None:
         assert False
     if amt is None:
         assert False
-    assert max_worker_id + amt < constants.NUM_WORKERS
     ids = list(range(max_worker_id+1, max_worker_id+amt+1))
     for worker_id in ids:
         assert len(player.worker_ids) < constants.NUM_WORKERS and worker_id not in player.worker_ids
@@ -449,7 +447,11 @@ def deploy_mech(game_state, player, mech_typ, board_coords):
         logging.debug(f'{player} deploys {mech_typ} mech to {board_coords} with key {mk}')
     board = game_state.board.add_piece(mk, board_coords)
     game_state = attr.evolve(game_state, board=board)
-    mech = attr.evolve(game_state.pieces_by_key[mk], board_coords=board_coords)
+    try:
+        mech = attr.evolve(game_state.pieces_by_key[mk], board_coords=board_coords)
+    except KeyError:
+        print(game_state.pieces_by_key.keys())
+        assert False
     game_state = attr.evolve(game_state, pieces_by_key=game_state.pieces_by_key.set(mk, mech))
     if mech_typ == MechType.RIVERWALK:
         adjacencies = player.faction.add_riverwalk_adjacencies(player.adjacencies, game_state.board)

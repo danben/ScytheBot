@@ -52,7 +52,7 @@ if __name__ == '__main__':
     mcts_wins = 0
     for i in range(100):
         game_state = GameState.from_num_players(num_players)
-        players = list(map(lambda x: x.faction_name(), game_state.players_by_idx.values()))
+        players = list(map(lambda x: x.faction_name(), game_state.players_by_idx))
         # agents = [MCTSAgent(players, temperature=0.8, num_rounds=100) for _ in range(num_players)]
         agents = [MCTSAgent(players, temperature=0.8, num_rounds=100), RandomAgent()]
         end_state = play_game(game_state, agents)

@@ -1,5 +1,5 @@
-import game.actions.action as a
 import game.state_change as sc
+from game.actions import Choice, Cost, MaybePayCost, Optional, ReceiveWorkers, StateChange
 from game.types import StructureType, TerrainType, TopActionType
 
 import attr
@@ -7,7 +7,7 @@ import logging
 
 
 @attr.s(frozen=True, slots=True)
-class ChooseNumWorkers(a.Choice):
+class ChooseNumWorkers(Choice):
     coords = attr.ib()
     max_workers = attr.ib()
 
@@ -19,14 +19,12 @@ class ChooseNumWorkers(a.Choice):
         return list(range(1, self.max_workers+1))
 
     def choose(self, agent, game_state):
-        c = self.choices(game_state)
-        if not c:
-            print(f'Max workers: {self.max_workers}')
-            assert False
-        return agent.choose_numeric(game_state, c)
+        return agent.choose_numeric(game_state, self.choices(game_state))
 
     def do(self, game_state, amt):
-        return sc.push_action(game_state, a.ReceiveWorkers.new(amt, self.coords))
+        if not amt:
+            assert False
+        return sc.push_action(game_state, ReceiveWorkers.new(amt, self.coords))
 
 
 def produce_on_space(coords, game_state):
@@ -57,7 +55,7 @@ def produce_on_space(coords, game_state):
 
 
 @attr.s(frozen=True, slots=True)
-class OnOneHex(a.Choice):
+class OnOneHex(Choice):
     @classmethod
     def new(cls):
         return cls('Produce on a single hex')
@@ -85,7 +83,7 @@ class OnOneHex(a.Choice):
 
 
 @attr.s(frozen=True, slots=True)
-class OnMillHex(a.StateChange):
+class OnMillHex(StateChange):
     @classmethod
     def new(cls):
         return cls('Produce on mill hex')
@@ -98,9 +96,9 @@ class OnMillHex(a.StateChange):
 
 
 @attr.s(frozen=True, slots=True)
-class ProduceIfPaid(a.StateChange):
+class ProduceIfPaid(StateChange):
     _on_one_hex = OnOneHex.new()
-    _on_one_hex_opt = a.Optional.new(_on_one_hex)
+    _on_one_hex_opt = Optional.new(_on_one_hex)
     _on_mill_hex = OnMillHex.new()
 
     @classmethod
@@ -113,6 +111,9 @@ class ProduceIfPaid(a.StateChange):
         top_action_cubes_and_structure = \
             player_mat.top_action_cubes_and_structures_by_top_action_typ[TopActionType.PRODUCE]
 
+        # TODO: Instead of pushing these all onto the stack at once, do them one at a time
+        # so we can stop if we run out of produce spaces. Also cache the available spaces
+        # and remove them one at a time rather than computing the set each time.
         if top_action_cubes_and_structure.cubes_upgraded[0]:
             game_state = sc.push_action(game_state, ProduceIfPaid._on_one_hex_opt)
 
@@ -130,7 +131,7 @@ class ProduceIfPaid(a.StateChange):
 
 
 @attr.s(frozen=True, slots=True)
-class Produce(a.MaybePayCost):
+class Produce(MaybePayCost):
     _if_paid = ProduceIfPaid.new()
 
     @classmethod
@@ -142,7 +143,7 @@ class Produce(a.MaybePayCost):
         power = 1 if produced_workers > 1 else 0
         popularity = 1 if produced_workers > 3 else 0
         coins = 1 if produced_workers > 5 else 0
-        return a.Cost.new(power=power, popularity=popularity, coins=coins)
+        return Cost.new(power=power, popularity=popularity, coins=coins)
 
     def top_action(self):
         return self.if_paid.top_action

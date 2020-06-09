@@ -1,5 +1,5 @@
-import game.actions.action as a
 import game.state_change as sc
+from game.actions import BottomAction, Choice, StateChange
 from game.types import Benefit, BottomActionType, ResourceType
 
 import attr
@@ -7,7 +7,7 @@ import logging
 
 
 @attr.s(frozen=True, slots=True)
-class RemoveCubeFromAnyTopSpace(a.Choice):
+class RemoveCubeFromAnyTopSpace(Choice):
     @classmethod
     def new(cls):
         return cls('Remove cube from top space')
@@ -26,7 +26,7 @@ class RemoveCubeFromAnyTopSpace(a.Choice):
 
 
 @attr.s(frozen=True, slots=True)
-class PlaceCubeInAnyBottomSpace(a.Choice):
+class PlaceCubeInAnyBottomSpace(Choice):
     @classmethod
     def new(cls):
         return cls('Place cube in bottom space')
@@ -43,7 +43,7 @@ class PlaceCubeInAnyBottomSpace(a.Choice):
         return sc.set_player(game_state, sc.get_current_player(game_state).upgrade_bottom_action(bottom_action_typ))
 
 
-class MoveCubeToBottom(a.StateChange):
+class MoveCubeToBottom(StateChange):
     _place_cube_in_any_bottom_space = PlaceCubeInAnyBottomSpace.new()
     _remove_cube_from_any_top_space = RemoveCubeFromAnyTopSpace.new()
 
@@ -60,5 +60,5 @@ _move_cube_to_bottom = MoveCubeToBottom.new()
 
 
 def action(maxcost, mincost, payoff):
-    return a.BottomAction.new(BottomActionType.UPGRADE, ResourceType.OIL, maxcost, mincost, payoff,
+    return BottomAction.new(BottomActionType.UPGRADE, ResourceType.OIL, maxcost, mincost, payoff,
                               Benefit.POWER, _move_cube_to_bottom)

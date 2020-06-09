@@ -1,0 +1,51 @@
+from game.actions import *
+
+action_constants = {
+    Boolean: 0,
+    Optional: 1,
+    SpendAResource: 2,
+    CrimeaMaybeChooseResource: 3,
+    GiveEnlistBenefitsToNeighbors: 4,
+    BottomActionIfPaid: 5,
+    BottomAction: 6,
+    ReceiveBenefit: 7,
+    ReceiveResources: 8,
+    ReceiveWorkers: 9,
+    GainPower: 10,
+    GainCombatCards: 11,
+    Bolster: 12,
+    ChooseSpaceToBuildOn: 13,
+    ChooseStructureToBuild: 14,
+    GetDefenderCombatCards: 15,
+    GetDefenderWheelPower: 16,
+    GetAttackerCombatCards: 17,
+    GetAttackerWheelPower: 18,
+    NordicMaybeUseCombatPower: 19,
+    ChooseDeploySpace: 20,
+    DeployMech: 21,
+    ChooseEnlistReward: 22,
+    ChooseRecruitToEnlist: 23,
+    LoadResources: 24,
+    LoadWorkers: 25,
+    Gain: 26,
+    MovePieceOneSpace: 27,
+    MoveOnePiece: 28,
+    ChooseNumWorkers: 29,
+    OnOneHex: 30,
+    Produce: 31,
+    TakeTurn: 32,
+    ChooseBoardSpaceForResource: 33,
+    ChooseResourceType: 34,
+    GainResources: 35,
+    GainPopularity: 36,
+    Trade: 37,
+    RemoveCubeFromAnyTopSpace: 38,
+    PlaceCubeInAnyBottomSpace: 39,
+    BolsterIfPaid: 40,
+    ProduceIfPaid: 41,
+    TradeIfPaid: 42
+}
+
+choices_that_need_context = {Boolean, Optional, BottomAction, LoadResources, LoadWorkers, MaybePayCost, MovePieceOneSpace}
+
+num_encodable_actions = len(action_constants)

@@ -1,12 +1,12 @@
-import game.actions.action as a
 import game.state_change as sc
+from game.actions import BottomAction, Choice
 from game.types import Benefit, BottomActionType, ResourceType
 
 import attr
 
 
 @attr.s(frozen=True, slots=True)
-class ChooseDeploySpace(a.Choice):
+class ChooseDeploySpace(Choice):
     mech_typ = attr.ib()
 
     @classmethod
@@ -24,7 +24,7 @@ class ChooseDeploySpace(a.Choice):
 
 
 @attr.s(frozen=True, slots=True)
-class DeployMech(a.Choice):
+class DeployMech(Choice):
     @classmethod
     def new(cls):
         return cls('Choose mech type to deploy')
@@ -43,5 +43,5 @@ _deploy_mech = DeployMech.new()
 
 
 def action(maxcost, mincost, payoff):
-    return a.BottomAction.new(BottomActionType.DEPLOY, ResourceType.METAL, maxcost, mincost, payoff,
+    return BottomAction.new(BottomActionType.DEPLOY, ResourceType.METAL, maxcost, mincost, payoff,
                               Benefit.COINS, _deploy_mech)

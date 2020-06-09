@@ -1,12 +1,12 @@
-import game.actions.action as a
 import game.state_change as sc
+from game.actions import Boolean, Cost, MaybePayCost, ReceiveBenefit, StateChange
 from game.types import Benefit, TopActionType
 
 import attr
 
 
 @attr.s(frozen=True, slots=True)
-class GainPower(a.StateChange):
+class GainPower(StateChange):
     @classmethod
     def new(cls):
         return cls('Gain power')
@@ -21,7 +21,7 @@ class GainPower(a.StateChange):
 
 
 @attr.s(frozen=True, slots=True)
-class GainCombatCards(a.StateChange):
+class GainCombatCards(StateChange):
     @classmethod
     def new(cls):
         return cls('Gain combat cards')
@@ -36,8 +36,8 @@ class GainCombatCards(a.StateChange):
 
 
 @attr.s(frozen=True, slots=True)
-class BolsterIfPaid(a.StateChange):
-    _power_vs_cards = a.Boolean.new(GainPower.new(), GainCombatCards.new())
+class BolsterIfPaid(StateChange):
+    _power_vs_cards = Boolean.new(GainPower.new(), GainCombatCards.new())
 
     @classmethod
     def new(cls):
@@ -45,13 +45,13 @@ class BolsterIfPaid(a.StateChange):
 
     def do(self, game_state):
         if sc.get_current_player(game_state).structure_is_built(TopActionType.BOLSTER):
-            game_state = sc.push_action(game_state, a.ReceiveBenefit.new(Benefit.POPULARITY, 1))
+            game_state = sc.push_action(game_state, ReceiveBenefit.new(Benefit.POPULARITY, 1))
 
         return sc.push_action(game_state, BolsterIfPaid._power_vs_cards)
 
 
 @attr.s(frozen=True, slots=True)
-class Bolster(a.MaybePayCost):
+class Bolster(MaybePayCost):
     _if_paid = BolsterIfPaid.new()
 
     @classmethod
@@ -59,7 +59,7 @@ class Bolster(a.MaybePayCost):
         return cls('Bolster', Bolster._if_paid)
 
     def cost(self, game_state):
-        return a.Cost.new(coins=1)
+        return Cost.new(coins=1)
 
 
 def action():

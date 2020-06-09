@@ -1,4 +1,4 @@
-import game.actions.action as a
+from game.actions import BottomAction, Choice
 import game.state_change as sc
 from game.types import Benefit, BottomActionType, ResourceType, StructureType, TerrainType
 
@@ -7,7 +7,7 @@ import logging
 
 
 @attr.s(frozen=True, slots=True)
-class ChooseSpaceToBuildOn(a.Choice):
+class ChooseSpaceToBuildOn(Choice):
     structure_typ = attr.ib()
 
     @classmethod
@@ -29,13 +29,14 @@ class ChooseSpaceToBuildOn(a.Choice):
 
 
 @attr.s(frozen=True, slots=True)
-class ChooseStructureToBuild(a.Choice):
+class ChooseStructureToBuild(Choice):
     @classmethod
     def new(cls):
         return cls('Choose structure to build')
 
     def choices(self, game_state):
-        top_action_typs_with_unbuilt_structures = sc.get_current_player(game_state).top_action_typs_with_unbuilt_structures()
+        top_action_typs_with_unbuilt_structures = \
+            sc.get_current_player(game_state).top_action_typs_with_unbuilt_structures()
         return list(map(StructureType.of_top_action_typ, top_action_typs_with_unbuilt_structures))
 
     def choose(self, agent, game_state):
@@ -49,5 +50,5 @@ _choose_structure_to_build = ChooseStructureToBuild.new()
 
 
 def action(maxcost, mincost, payoff):
-    return a.BottomAction.new(BottomActionType.BUILD, ResourceType.WOOD, maxcost, mincost, payoff,
+    return BottomAction.new(BottomActionType.BUILD, ResourceType.WOOD, maxcost, mincost, payoff,
                               Benefit.POPULARITY, _choose_structure_to_build)

@@ -1,6 +1,5 @@
-import game.actions.action as a
 import game.state_change as sc
-from game.actions.combat import MaybeCombat
+from game.actions import Boolean, Choice, MaybeCombat, Optional, StateChange
 from game.types import Benefit, ResourceType, TopActionType
 
 import attr
@@ -8,7 +7,7 @@ import logging
 
 
 @attr.s(frozen=True, slots=True)
-class LoadResources(a.Choice):
+class LoadResources(Choice):
     piece_key = attr.ib()
     resource_typ = attr.ib()
 
@@ -36,7 +35,7 @@ class LoadResources(a.Choice):
 
 
 @attr.s(frozen=True, slots=True)
-class LoadWorkers(a.Choice):
+class LoadWorkers(Choice):
     mech_key = attr.ib()
 
     @classmethod
@@ -70,7 +69,7 @@ class LoadWorkers(a.Choice):
 
 
 @attr.s(frozen=True, slots=True)
-class Gain(a.StateChange):
+class Gain(StateChange):
     @classmethod
     def new(cls):
         return cls('Gain coins')
@@ -85,7 +84,7 @@ class Gain(a.StateChange):
 
 
 @attr.s(frozen=True, slots=True)
-class MovePieceToSpaceAndDropCarryables(a.StateChange):
+class MovePieceToSpaceAndDropCarryables(StateChange):
     piece_key = attr.ib()
     board_coords = attr.ib()
 
@@ -152,7 +151,7 @@ class MovePieceToSpaceAndDropCarryables(a.StateChange):
 
 
 @attr.s(frozen=True, slots=True)
-class MovePieceOneSpace(a.Choice):
+class MovePieceOneSpace(Choice):
     piece_key = attr.ib()
 
     @classmethod
@@ -176,7 +175,7 @@ class MovePieceOneSpace(a.Choice):
 
 
 @attr.s(frozen=True, slots=True)
-class LoadAndMovePiece(a.StateChange):
+class LoadAndMovePiece(StateChange):
     piece_key = attr.ib()
 
     @classmethod
@@ -204,7 +203,7 @@ class LoadAndMovePiece(a.StateChange):
 # The outer class represents the entire move action for a single piece. The steps are:
 # 1. Choose a piece to move from pieces that haven't moved this turn. Only now do we know how much move we can have.
 # 2. For each point of movement you have the option to:
-# 2a. Load as much stuff as you want (look at everything in your current square that's carryable by your piece type)
+# 2 Load as much stuff as you want (look at everything in your current square that's carryable by your piece type)
 # 2b. Move to an adjacent hex
 # 2bi. Update the new and old hexes for the piece being moved as well as each piece being carried.
 # 2biii. Mark the piece as having moved this turn.
@@ -212,7 +211,7 @@ class LoadAndMovePiece(a.StateChange):
 
 
 @attr.s(frozen=True, slots=True)
-class MoveOnePiece(a.Choice):
+class MoveOnePiece(Choice):
     @classmethod
     def new(cls):
         return cls('Move one piece')
@@ -226,7 +225,6 @@ class MoveOnePiece(a.Choice):
         return [piece for piece in sc.movable_pieces(game_state, current_player)
                 if sc.controller(game_state, game_state.board.get_space(piece.board_coords))
                 is current_player.faction_name()]
-
 
     def choose(self, agent, game_state):
         movable_pieces = self.choices(game_state)
@@ -244,14 +242,14 @@ class MoveOnePiece(a.Choice):
             logging.debug(f'Chosen: {piece}')
         piece_key = piece.key()
         for _ in range(sc.get_current_player(game_state).base_move_for_piece_typ(piece.typ) - 1):
-            game_state = sc.push_action(game_state, a.Optional.new(LoadAndMovePiece.new(piece_key)))
+            game_state = sc.push_action(game_state, Optional.new(LoadAndMovePiece.new(piece_key)))
         return sc.push_action(game_state, LoadAndMovePiece.new(piece_key))
 
 
-class Move(a.StateChange):
+class Move(StateChange):
     _maybe_combat = MaybeCombat.new()
     _move_one_piece = MoveOnePiece.new()
-    _optional_move = a.Optional.new(_move_one_piece)
+    _optional_move = Optional.new(_move_one_piece)
 
     @classmethod
     def new(cls):
@@ -273,4 +271,4 @@ _gain = Gain.new()
 
 
 def action():
-    return a.Boolean.new(_move, _gain)
+    return Boolean.new(_move, _gain)
