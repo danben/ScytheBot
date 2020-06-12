@@ -143,7 +143,10 @@ class GetAttackerCombatCards(Choice):
             self = attr.evolve(self, attacker_total_power=(self.attacker_total_power + card))
             attacking_player = sc.get_player_by_faction_name(game_state, self.attacking_faction_name)
             game_state = sc.discard_combat_card(game_state, attacking_player, card)
-        self = attr.evolve(self, num_combat_cards=self.num_combat_cards - 1)
+            self = attr.evolve(self, num_combat_cards=self.num_combat_cards - 1)
+        else:
+            self = attr.evolve(self, num_combat_cards=0)
+
         if self.num_combat_cards:
             return sc.push_action(game_state, self)
         else:
@@ -277,6 +280,7 @@ class MaybeCombat(StateChange):
     # - have each player choose an amount of power from 0 to min(7, power)
     #   as well as an optional combat card for each of their plastic pieces
     # - send the loser home and give the winner a star.
+    # TODO: we can cut this down to check only the spaces that were moved into this turn
     def do(self, game_state):
         for board_coords in game_state.board.base_adjacencies.keys():
             space = game_state.board.get_space(board_coords)

@@ -1,5 +1,6 @@
 from game import constants
-from game.actions import Boolean, BottomAction, LoadResources, LoadWorkers,  MaybePayCost, MovePieceOneSpace, Optional
+from game.actions import Boolean, BottomAction, GetAttackerCombatCards, GetDefenderCombatCards, LoadResources
+from game.actions import LoadWorkers,  MaybePayCost, MovePieceOneSpace, Optional
 from game.types import Benefit, BottomActionType, FactionName, ResourceType, StarType, StructureType, TopActionType
 import game.state_change as sc
 import game.encoders.actions as encode_actions
@@ -15,6 +16,8 @@ class EncodedPlayerMat:
     top_action_cubes = attr.ib()
     bottom_action_costs_and_recruits = attr.ib()
     last_action_spot_taken = attr.ib(default=None)
+
+    shape = (constants.NUM_PLAYER_MATS + constants.NUM_UPGRADE_CUBES + 8 + 1,)
 
 
 def encode_top_action_cubes(top_action_cubes_and_structures_by_top_action_typ):
@@ -62,9 +65,19 @@ class EncodedPlayer:
 
     misc_data_size = constants.NUM_FACTIONS + 4  # coins + popularity + power + num_workers
 
+    # 1 is for the total number of stars that the player has
+    shape_as_self = (EncodedPlayerMat.shape[0] + constants.NUM_COMBAT_CARD_VALUES + 1 + constants.NUM_STAR_TYPES +
+                     constants.NUM_ENLIST_BENEFITS + constants.NUM_MECHS + constants.NUM_STRUCTURES + misc_data_size,)
+
+    shape_as_other = (shape_as_self[0] - constants.NUM_COMBAT_CARD_VALUES + 1)
+
+    def encoded_data(self):
+        return np.concatenate([self.player_mat.encoded_data, self.combat_cards, self.stars, self.enlist_rewards,
+                               self.mechs, self.structures, self.misc_data])
+
 
 def encode_combat_cards(aggregates):
-    ret = np.zeros(constants.MAX_COMBAT_CARD - constants.MIN_COMBAT_CARD + 1)
+    ret = np.zeros(constants.NUM_COMBAT_CARD_VALUES)
     for i in range(constants.MIN_COMBAT_CARD, constants.MAX_COMBAT_CARD + 1):
         ret[i - constants.MIN_COMBAT_CARD] = aggregates[i] / constants.DECK_SIZE
     return ret
@@ -120,13 +133,39 @@ def encode_other_players(game_state, index_by_faction_name):
     num_players = len(index_by_faction_name)
     ret = [None] * (num_players - 1)
     current_player_faction_name = game_state.get_current_player().faction_name
-    for faction_name, index in index_by_faction_name.values():
+    for faction_name, index in index_by_faction_name.items():
         if faction_name is not current_player_faction_name:
             ret[index-1] = encode_player(game_state.players_by_idx[game_state.player_idx_by_faction_name[faction_name]],
                                          as_self=False)
 
     assert all(ret)
     return ret
+
+
+BOARD_ENCODING__PLANES_PER_PLAYER = 6
+BOARD_ENCODING__CHARACTER_PLANE = 0
+BOARD_ENCODING__MECH_PLANE = 1
+BOARD_ENCODING__WORKER_PLANE = 2
+BOARD_ENCODING__MILL_PLANE = 3
+BOARD_ENCODING__STRUCTURE_PLANE = 4
+BOARD_ENCODING__MINE_PLANE = 5
+BOARD_ENCODING__OIL_PLANE = BOARD_ENCODING__PLANES_PER_PLAYER * constants.MAX_PLAYERS
+BOARD_ENCODING__WOOD_PLANE = BOARD_ENCODING__OIL_PLANE + 1
+BOARD_ENCODING__METAL_PLANE = BOARD_ENCODING__OIL_PLANE + 2
+BOARD_ENCODING__FOOD_PLANE = BOARD_ENCODING__OIL_PLANE + 3
+BOARD_ENCODING__EXTRA_PLANES = 4
+BOARD_ENCODING__THEORETICAL_MAX_RESOURCES_PER_SPACE = 20
+BOARD_ENCODING__TOTAL_PLANES = BOARD_ENCODING__PLANES_PER_PLAYER * constants.MAX_PLAYERS + BOARD_ENCODING__EXTRA_PLANES
+
+BOARD_ENCODING__RESOURCE_PLANES = {
+    ResourceType.OIL: BOARD_ENCODING__OIL_PLANE,
+    ResourceType.METAL: BOARD_ENCODING__METAL_PLANE,
+    ResourceType.WOOD: BOARD_ENCODING__WOOD_PLANE,
+    ResourceType.FOOD: BOARD_ENCODING__FOOD_PLANE
+}
+
+HOME_BASE_ENCODING_SIZE_PER_PLAYER = 3
+TOP_ACTION_ENCODING_SIZE = 3 * encode_actions.num_encodable_actions + constants.BOARD_ROWS + constants.BOARD_COLS + 1
 
 
 @attr.s(frozen=True, slots=True)
@@ -137,8 +176,21 @@ class EncodedGameState:
     discard_pile = attr.ib()
     current_player = attr.ib()
     other_players = attr.ib()
-    top_action = attr.ib()
+    top_action__action_encoding = attr.ib()
+    top_action__space_encoding = attr.ib()
+    top_action__power_encoding = attr.ib()
 
+    board_shape = (BOARD_ENCODING__TOTAL_PLANES, constants.BOARD_ROWS, constants.BOARD_COLS)
+    data_shape = (HOME_BASE_ENCODING_SIZE_PER_PLAYER + constants.NUM_STRUCTURE_BONUSES
+                  + constants.NUM_COMBAT_CARD_VALUES + EncodedPlayer.shape_as_self[0]
+                  + EncodedPlayer.shape_as_other[0] * len(other_players)
+                  + TOP_ACTION_ENCODING_SIZE,)
+
+    def encoded_data(self):
+        return np.concatenate([self.home_bases, self.structure_bonus, self.discard_pile,
+                               self.top_action__action_encoding, self.top_action__space_encoding,
+                               self.top_action__power_encoding, self.current_player.encoded_data()]
+                              + list(map(lambda x: x.encoded_data(), self.other_players)))
 
 def encode_discard_pile(combat_cards):
     aggregates = defaultdict(int)
@@ -147,68 +199,44 @@ def encode_discard_pile(combat_cards):
     return encode_combat_cards(aggregates)
 
 
-BOARD_ENCODING__PLANES_PER_PLAYER = 3 + constants.NUM_WORKERS + constants.NUM_MECHS
-BOARD_ENCODING__CHARACTER_PLANE = 0
-BOARD_ENCODING__STRUCTURE_PLANE = 1
-BOARD_ENCODING__MILL_PLANE = 2
-BOARD_ENCODING__WORKER_PLANE__START = 3
-BOARD_ENCODING__MECH_PLANE__START = BOARD_ENCODING__WORKER_PLANE__START + constants.NUM_WORKERS
-BOARD_ENCODING__TUNNELS_PLANE = BOARD_ENCODING__PLANES_PER_PLAYER * constants.MAX_PLAYERS
-BOARD_ENCODING__ENCOUNTERS_PLANE = BOARD_ENCODING__TUNNELS_PLANE + 1
-BOARD_ENCODING__OIL_PLANE = BOARD_ENCODING__TUNNELS_PLANE + 2
-BOARD_ENCODING__WOOD_PLANE = BOARD_ENCODING__TUNNELS_PLANE + 3
-BOARD_ENCODING__METAL_PLANE = BOARD_ENCODING__TUNNELS_PLANE + 4
-BOARD_ENCODING__FOOD_PLANE = BOARD_ENCODING__TUNNELS_PLANE + 5
-BOARD_ENCODING__EXTRA_PLANES = 6 # tunnels, encounters and each of the four resource types
-BOARD_ENCODING__THEORETICAL_MAX_RESOURCES_PER_SPACE = 20
-
-BOARD_ENCODING__RESOURCE_PLANES = {
-    ResourceType.OIL: BOARD_ENCODING__OIL_PLANE,
-    ResourceType.METAL: BOARD_ENCODING__METAL_PLANE,
-    ResourceType.WOOD: BOARD_ENCODING__WOOD_PLANE,
-    ResourceType.FOOD: BOARD_ENCODING__FOOD_PLANE
-}
-
-
 def encode_space(board, index_by_faction_name, space):
     row, col = space.coords
-    if space._has_tunnel:
-        board[BOARD_ENCODING__TUNNELS_PLANE][row][col] = 1
-    if space.has_encounter and not space.encounter_used:
-        board[BOARD_ENCODING__ENCOUNTERS_PLANE][row][col] = 1
+    # if space.has_encounter and not space.encounter_used:
+    #     board[BOARD_ENCODING__ENCOUNTERS_PLANE][row][col] = 1
     if space.structure_key:
         start_plane = index_by_faction_name[space.structure_key.faction_name] * BOARD_ENCODING__PLANES_PER_PLAYER
-        board[start_plane + BOARD_ENCODING__STRUCTURE_PLANE][row][col] = 1
+        board[row][col][start_plane + BOARD_ENCODING__STRUCTURE_PLANE] = 1
         if space.structure_key.id == StructureType.MINE:
-            board[BOARD_ENCODING__TUNNELS_PLANE][row][col] = 1
+            board[row][col][start_plane + BOARD_ENCODING__MINE_PLANE] = 1
+        elif space.structure_key.id == StructureType.MILL:
+            board[row][col][start_plane + BOARD_ENCODING__MILL_PLANE] = 1
     for character_key in space.character_keys:
         start_plane = index_by_faction_name[character_key.faction_name] * BOARD_ENCODING__PLANES_PER_PLAYER
-        board[start_plane + BOARD_ENCODING__CHARACTER_PLANE][row][col] = 1
+        board[row][col][start_plane + BOARD_ENCODING__CHARACTER_PLANE] = 1
     for mech_key in space.mech_keys:
         start_plane = index_by_faction_name[mech_key.faction_name] * BOARD_ENCODING__PLANES_PER_PLAYER
-        board[start_plane + BOARD_ENCODING__MECH_PLANE__START + mech_key.id - 1][row][col] = 1
+        board[row][col][start_plane + BOARD_ENCODING__MECH_PLANE] += 1 / constants.NUM_MECHS
     for worker_key in space.worker_keys:
         start_plane = index_by_faction_name[worker_key.faction_name] * BOARD_ENCODING__PLANES_PER_PLAYER
-        board[start_plane + BOARD_ENCODING__WORKER_PLANE__START + worker_key.id - 1][row][col] = 1
+        board[row][col][start_plane + BOARD_ENCODING__WORKER_PLANE] += 1 / constants.NUM_WORKERS
     for resource_typ, amt in space.resources.items():
-        board[BOARD_ENCODING__RESOURCE_PLANES[resource_typ]] = amt / BOARD_ENCODING__THEORETICAL_MAX_RESOURCES_PER_SPACE
+        board[row][col][BOARD_ENCODING__RESOURCE_PLANES[resource_typ]] = \
+            amt / BOARD_ENCODING__THEORETICAL_MAX_RESOURCES_PER_SPACE
 
 
 def encode_home_base(home_bases, index_by_faction_name, space):
-    start_plane = index_by_faction_name[FactionName(space.coords[1])] * BOARD_ENCODING__PLANES_PER_PLAYER
+    start_plane = index_by_faction_name[FactionName(space.coords[1])] * HOME_BASE_ENCODING_SIZE_PER_PLAYER
     if space.character_keys:
-        home_bases[start_plane + BOARD_ENCODING__CHARACTER_PLANE] = 1
-    for mech_key in space.mech_keys:
-        home_bases[start_plane + BOARD_ENCODING__MECH_PLANE__START + mech_key.id - 1] = 1
-    for worker_key in space.worker_keys:
-        home_bases[start_plane + BOARD_ENCODING__WORKER_PLANE__START + worker_key.id - 1] = 1
+        home_bases[start_plane] = 1
+    home_bases[start_plane + 1] = len(space.mech_keys) / constants.NUM_MECHS
+    home_bases[start_plane + 2] = len(space.worker_keys) / constants.NUM_WORKERS
 
 
 def encode_board(game_state, index_by_faction_name):
     player_planes = constants.MAX_PLAYERS * BOARD_ENCODING__PLANES_PER_PLAYER
     num_planes = player_planes + BOARD_ENCODING__EXTRA_PLANES
-    board = np.zeros((num_planes, constants.BOARD_ROWS, constants.BOARD_COLS))
-    home_bases = np.zeros(player_planes)
+    board = np.zeros((constants.BOARD_ROWS, constants.BOARD_COLS, num_planes))
+    home_bases = np.zeros(3 * constants.MAX_PLAYERS)
     for space in game_state.board.board_spaces_by_coords.values():
         row, col = space.coords
         if row == -1:
@@ -223,13 +251,22 @@ def action_num(action):
     return encode_actions.action_constants[type(action)]
 
 
-def encode_piece_key(piece_encoding, piece_key):
-    piece_encoding[piece_key.faction_name.value - 1] = 1
-    piece_encoding[constants.NUM_FACTIONS + piece_key.piece_typ.value - 1] = 1
-    piece_encoding[constants.NUM_FACTIONS + constants.NUM_PIECE_TYPES + piece_key.id - 1] = 1
+# def encode_piece_key(piece_encoding, piece_key):
+#     piece_encoding[piece_key.faction_name.value - 1] = 1
+#     piece_encoding[constants.NUM_FACTIONS + piece_key.piece_typ.value - 1] = 1
+#     piece_encoding[constants.NUM_FACTIONS + constants.NUM_PIECE_TYPES + piece_key.id - 1] = 1
+
+def encode_piece_coords(space_encoding, game_state, piece_key):
+    coords = game_state.pieces_by_key[piece_key].board_coords
+    space_encoding[coords[0]] = 1
+    space_encoding[constants.BOARD_ROWS + coords[1]] = 1
 
 
-def encode_context(top_action, actions_encoding, piece_encoding):
+THEORETICAL_POWER_MAXIMUM = 22
+
+
+def encode_context(game_state, actions_encoding, space_encoding, power_encoding):
+    top_action = game_state.action_stack.first
     if isinstance(top_action, Boolean):
         choice_1 = action_num(top_action.action1)
         choice_2 = action_num(top_action.action2)
@@ -245,23 +282,29 @@ def encode_context(top_action, actions_encoding, piece_encoding):
         if_paid_action = action_num(top_action.if_paid)
         actions_encoding[encode_actions.num_encodable_actions + if_paid_action] = 1
     elif isinstance(top_action, LoadResources):
-        encode_piece_key(piece_encoding, top_action.piece_key)
+        encode_piece_coords(space_encoding, game_state, top_action.piece_key)
     elif isinstance(top_action, LoadWorkers):
-        encode_piece_key(piece_encoding, top_action.mech_key)
+        encode_piece_coords(space_encoding, game_state, top_action.mech_key)
     elif isinstance(top_action, MovePieceOneSpace):
-        encode_piece_key(piece_encoding, top_action.piece_key)
+        encode_piece_coords(space_encoding, game_state, top_action.piece_key)
+    elif isinstance(top_action, GetAttackerCombatCards):
+        power_encoding[0] = top_action.attacker_total_power / THEORETICAL_POWER_MAXIMUM
+    elif isinstance(top_action, GetDefenderCombatCards):
+        power_encoding[0] = top_action.defender_total_power / THEORETICAL_POWER_MAXIMUM
     else:
         assert False
 
 
-def encode_top_action(top_action):
+def encode_top_action(game_state):
     actions_encoding = np.zeros(3 * encode_actions.num_encodable_actions)
-    piece_encoding = np.zeros(constants.NUM_FACTIONS + constants.NUM_PIECE_TYPES + constants.NUM_WORKERS)
+    space_encoding = np.zeros(constants.BOARD_ROWS + constants.BOARD_COLS)
+    power_encoding = np.zeros(1)
+    top_action = game_state.action_stack.first
     top_action_typ = type(top_action)
     actions_encoding[encode_actions.action_constants[top_action_typ]] = 1
     if top_action_typ in encode_actions.choices_that_need_context:
-        encode_context(top_action, actions_encoding, piece_encoding)
-    return actions_encoding, piece_encoding
+        encode_context(top_action, actions_encoding, space_encoding, power_encoding)
+    return actions_encoding, space_encoding, power_encoding
 
 
 # Encode players in the following order: self, player to my right, player to my left,
@@ -280,7 +323,13 @@ def get_indices_by_faction_name(game_state):
             ret[game_state.players_by_idx[idx % num_players].faction_name] = ctr
             ctr += 1
 
-    assert len(ret) == num_players - 1
+    assert len(ret) == num_players
+    return ret
+
+
+def encode_structure_bonus(structure_bonus_value):
+    ret = np.zeros(constants.NUM_STRUCTURE_BONUSES)
+    ret[structure_bonus_value-1] = 1
     return ret
 
 
@@ -289,8 +338,8 @@ def encode(game_state):
     board, home_bases = encode_board(game_state, indices_by_faction_name)
     return EncodedGameState(board,
                             home_bases,
-                            game_state.structure_bonus.value,
+                            encode_structure_bonus(game_state.structure_bonus.value),
                             encode_discard_pile(game_state.combat_cards),
                             encode_player(sc.get_current_player(game_state), as_self=True),
                             encode_other_players(game_state, indices_by_faction_name),
-                            encode_top_action(game_state.action_stack.first))
+                            *encode_top_action(game_state))

@@ -17,6 +17,9 @@ class Action(ABC):
     def __str__(self):
         return self.name
 
+    def __repr__(self):
+        return self.name
+
 
 @attr.s(frozen=True, slots=True)
 class StateChange(Action, ABC):

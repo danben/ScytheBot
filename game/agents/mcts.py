@@ -3,6 +3,7 @@ from game.agents import Agent
 from game.agents.random import RandomAgent
 import game.state_change as sc
 
+import logging
 import math
 import random
 
@@ -69,9 +70,13 @@ class MCTSAgent(Agent):
         return game_state.winner
 
     def select_move(self, game_state, choices):
+        old_level = logging.getLogger().level
+        logging.getLogger().setLevel(logging.ERROR)
         if not choices:
+            logging.getLogger().setLevel(old_level)
             return None
         if len(choices) == 1:
+            logging.getLogger().setLevel(old_level)
             return choices[0]
         root = MCTSNode(game_state, self.players, unvisited_moves=choices)
         for i in range(self.num_rounds):
@@ -97,6 +102,7 @@ class MCTSAgent(Agent):
                 best_pct = child_pct
                 best_move = child.move
 
+        logging.getLogger().setLevel(old_level)
         return best_move
 
     def select_child(self, node):

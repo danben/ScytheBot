@@ -46,6 +46,7 @@ action_constants = {
     TradeIfPaid: 42
 }
 
-choices_that_need_context = {Boolean, Optional, BottomAction, LoadResources, LoadWorkers, MaybePayCost, MovePieceOneSpace}
+choices_that_need_context = {Boolean, Optional, BottomAction, LoadResources, LoadWorkers, MaybePayCost,
+                             MovePieceOneSpace, GetAttackerCombatCards, GetDefenderCombatCards}
 
 num_encodable_actions = len(action_constants)

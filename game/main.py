@@ -6,7 +6,7 @@ import game.state_change as sc
 import cProfile
 import logging
 
-logging.basicConfig(level=logging.ERROR)
+logging.basicConfig(level=logging.DEBUG)
 
 ''' TODO list
  - all of the faction abilities
@@ -44,23 +44,28 @@ def play_game(game_state, agents):
     return game_state
 
 
+def play_one_game(num_players):
+    game_state = GameState.from_num_players(num_players)
+    players = list(map(lambda x: x.faction_name(), game_state.players_by_idx))
+    agents = [MCTSAgent(players, temperature=0.8, num_rounds=10000) for _ in range(num_players)]
+    # agents = [MCTSAgent(players, temperature=0.8, num_rounds=100), RandomAgent()]
+    return play_game(game_state, agents)
+
+
 if __name__ == '__main__':
     num_players = 2
+    play_one_game(num_players)
 
     # agents = [RandomAgent() for _ in range(num_players)]
     # while True:
-    mcts_wins = 0
-    for i in range(100):
-        game_state = GameState.from_num_players(num_players)
-        players = list(map(lambda x: x.faction_name(), game_state.players_by_idx))
-        # agents = [MCTSAgent(players, temperature=0.8, num_rounds=100) for _ in range(num_players)]
-        agents = [MCTSAgent(players, temperature=0.8, num_rounds=100), RandomAgent()]
-        end_state = play_game(game_state, agents)
-        mcts_player = end_state.players_by_idx[0].faction_name()
-        if mcts_player is end_state.winner:
-            print(f'Game {i} won by MCTS ({mcts_player})')
-            mcts_wins += 1
-        else:
-            print(f'Game {i} won by random ({end_state.winner})')
-    print(f'MCTS won {mcts_wins} out of 100 games')
+    # mcts_wins = 0
+    # for i in range(100):
+    #     end_state = play_one_game(num_players)
+    #     mcts_player = end_state.players_by_idx[0].faction_name()
+    #     if mcts_player is end_state.winner:
+    #         print(f'Game {i} won by MCTS ({mcts_player})')
+    #         mcts_wins += 1
+    #     else:
+    #         print(f'Game {i} won by random ({end_state.winner})')
+    # print(f'MCTS won {mcts_wins} out of 100 games')
     # cProfile.run('play_game(agents)', sort='cumtime')

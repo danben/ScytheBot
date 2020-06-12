@@ -16,7 +16,7 @@ ALL_RIVERS = {((0, 3), (1, 3)), ((0, 3), (0, 4)), ((0, 4), (1, 3)), ((0, 5), (0,
 
 
 def blocked_by_river(from_coords, to_coords):
-    return (from_coords, to_coords) in ALL_RIVERS or (from_coords, to_coords) in ALL_RIVERS
+    return (from_coords, to_coords) in ALL_RIVERS or (to_coords, from_coords) in ALL_RIVERS
 
 
 ''' Adjacency should be a function of piece and board space. Adjacencies should be precomputed on launch
@@ -296,7 +296,6 @@ class Board:
                 assert len(adjacencies_accounting_for_rivers_and_lakes[space.coords]) == 2
 
         home_bases = pmap({faction_name: home_base.coords for faction_name, home_base in home_bases.items()})
-
         return cls(home_bases, pmap(board_spaces_by_coords), pmap(base_adjacencies),
                    pmap(adjacencies_accounting_for_rivers_and_lakes))
 

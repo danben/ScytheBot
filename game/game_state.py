@@ -84,6 +84,7 @@ class GameState:
             for coords in spaces_adjacent_to_home_base:
                 game_state = sc.add_workers(game_state, player, coords, 1)
                 player = game_state.players_by_idx[i]
+
         return game_state
 
     def is_over(self):
