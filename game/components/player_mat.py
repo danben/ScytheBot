@@ -88,7 +88,7 @@ class PlayerMat:
     action_spaces = attr.ib()
     top_action_cubes_and_structures_by_top_action_typ = attr.ib()
     has_enlisted_by_bottom_action_typ = attr.ib()
-    bottom_spaces_by_bottom_action_typ = attr.ib()
+    action_spaces_by_bottom_action_typ = attr.ib()
     last_action_spot_taken = attr.ib(default=None)
 
     @classmethod
@@ -100,11 +100,11 @@ class PlayerMat:
                   TopActionType.PRODUCE: TopActionCubesAndStructure.new(StructureType.MILL, num_cubes=1)})
         has_enlisted_by_bottom_action_typ = pmap({b: False for b in BottomActionType})
         action_spaces = _action_spaces[name]
-        bottom_spaces_by_bottom_action_typ = pmap({a[1].bottom_action_typ: i for i, a in enumerate(action_spaces)})
+        action_spaces_by_bottom_action_typ = pmap({a[1].bottom_action_typ: i for i, a in enumerate(action_spaces)})
 
         return cls(name, _starting_popularity[name], _starting_money[name], action_spaces,
                    top_action_cubes_and_structures_by_top_action_typ, has_enlisted_by_bottom_action_typ,
-                   bottom_spaces_by_bottom_action_typ)
+                   action_spaces_by_bottom_action_typ)
 
     def move_pawn_to(self, i):
         if logging.getLogger().isEnabledFor(logging.DEBUG):
@@ -131,7 +131,7 @@ class PlayerMat:
         return attr.evolve(self, has_enlisted_by_bottom_action_typ=has_enlisted_by_bottom_action_typ)
 
     def upgrade_bottom_action(self, bottom_action_typ):
-        action_space_index = self.bottom_spaces_by_bottom_action_typ[bottom_action_typ]
+        action_space_index = self.action_spaces_by_bottom_action_typ[bottom_action_typ]
         action_pair = self.action_spaces[action_space_index]
         top_action = action_pair[0]
         bottom_action = action_pair[1].upgrade()

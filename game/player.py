@@ -52,7 +52,8 @@ class Player:
     home_base = attr.ib()
     adjacencies = attr.ib()
     worker_ids = attr.ib(default=pset())
-    enlist_rewards = attr.ib(default=pmap({benefit: False for benefit in Benefit}))
+    # TODO: No reason this needs to be a pmap
+    enlist_rewards = attr.ib(default=pset())
     mech_ids = attr.ib(default=pset())
     structures = attr.ib(default=pset())
 
@@ -99,7 +100,7 @@ class Player:
             assert coords
         for coords in sc.board_coords_with_structures(game_state, self):
             assert coords
-        assert sum(self.enlist_rewards.values()) == sum(self.player_mat.has_enlisted_by_bottom_action_typ.values())
+        assert len(self.enlist_rewards) == sum(self.player_mat.has_enlisted_by_bottom_action_typ.values())
 
     # def resources_string(self, board):
     #     return ''.join([f'{r} : {self.available_resources(r, board)}; ' for r in ResourceType])
@@ -175,13 +176,13 @@ class Player:
         return self.player_mat.cube_spaces_not_fully_upgraded()
 
     def can_enlist(self):
-        return not all(self.enlist_rewards.values())
+        return len(self.enlist_rewards) < constants.NUM_ENLIST_BENEFITS
 
     def unenlisted_bottom_action_typs(self):
         return [b for b, enlisted in self.player_mat.has_enlisted_by_bottom_action_typ.items() if not enlisted]
 
     def available_enlist_rewards(self):
-        return [benefit for (benefit, enlisted) in self.enlist_rewards.items() if not enlisted]
+        return [benefit for benefit in Benefit if benefit not in self.enlist_rewards]
 
     def has_enlisted(self, bottom_action_typ):
         return self.player_mat.has_enlisted_by_bottom_action_typ[bottom_action_typ]

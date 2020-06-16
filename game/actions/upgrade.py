@@ -39,7 +39,7 @@ class PlaceCubeInAnyBottomSpace(Choice):
 
     def do(self, game_state, bottom_action_typ):
         if logging.getLogger().isEnabledFor(logging.DEBUG):
-            logging.debug(f'Removed cube from {bottom_action_typ}')
+            logging.debug(f'Added cube to {bottom_action_typ}')
         return sc.set_player(game_state, sc.get_current_player(game_state).upgrade_bottom_action(bottom_action_typ))
 
 

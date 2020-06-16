@@ -85,7 +85,7 @@ class Mech(_MovablePiece):
 @attr.s(frozen=True, slots=True)
 class Character(_MovablePiece):
     typ = attr.ib(default=PieceType.CHARACTER)
-    id = attr.ib(default=1)
+    id = attr.ib(default=0)
 
 
 @attr.s(frozen=True, slots=True)
@@ -94,7 +94,7 @@ class Worker(_MovablePiece):
 
 
 def character_key(faction_name):
-    return PieceKey(PieceType.CHARACTER, faction_name, 1)
+    return PieceKey(PieceType.CHARACTER, faction_name, 0)
 
 
 def worker_key(faction_name, piece_id):

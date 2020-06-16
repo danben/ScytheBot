@@ -48,7 +48,7 @@ class GameState:
                 ctor = gc_piece.Character
             for faction in factions:
                 for i in range(piece_typ.num_pieces()):
-                    new_piece = ctor(None, faction.name, i+1)
+                    new_piece = ctor(None, faction.name, i)
                     pieces_by_key[new_piece.key()] = new_piece
 
         for faction in factions:
@@ -70,7 +70,7 @@ class GameState:
             combat_cards, starting_combat_cards = combat_cards.draw(faction.starting_combat_cards)
             player = Player.new(i, faction, player_mat_names[i], board, starting_combat_cards)
             player_idx_by_faction_name[faction.name] = i
-            board = add_piece_for_player(player, board, PieceType.CHARACTER, 1, player.home_base)
+            board = add_piece_for_player(player, board, PieceType.CHARACTER, 0, player.home_base)
             players_by_idx.append(player)
 
         players_by_idx = pvector(players_by_idx)

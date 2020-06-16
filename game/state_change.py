@@ -358,20 +358,19 @@ def achieve(game_state, player, star_typ):
 
 
 def add_workers(game_state, player, coords, amt):
-    max_worker_id = max(player.worker_ids) if player.worker_ids else 0
+    max_worker_id = max(player.worker_ids) if player.worker_ids else -1
     if max_worker_id is None:
         assert False
     if amt is None:
         assert False
     ids = list(range(max_worker_id+1, max_worker_id+amt+1))
+    space = game_state.board.get_space(coords)
     for worker_id in ids:
         assert len(player.worker_ids) < constants.NUM_WORKERS and worker_id not in player.worker_ids
         worker_ids = player.worker_ids.add(worker_id)
         player = attr.evolve(player, worker_ids=worker_ids)
         game_state = set_player(game_state, player)
-    space = game_state.board.get_space(coords)
-    for i in ids:
-        piece_key = gc_piece.worker_key(player.faction_name(), i)
+        piece_key = gc_piece.worker_key(player.faction_name(), worker_id)
         space = space.add_piece(piece_key)
         piece = attr.evolve(game_state.pieces_by_key[piece_key], board_coords=coords)
         game_state = attr.evolve(game_state, pieces_by_key=game_state.pieces_by_key.set(piece_key, piece))
@@ -476,10 +475,10 @@ def remove_upgrade_cube(game_state, player, top_action_typ, spot):
 
 
 def mark_enlist_benefit(game_state, player, enlist_benefit):
-    assert not player.enlist_rewards[enlist_benefit]
+    assert enlist_benefit not in player.enlist_rewards
     if logging.getLogger().isEnabledFor(logging.DEBUG):
         logging.debug(f'{player} takes enlist benefit {enlist_benefit}')
-    enlist_rewards = player.enlist_rewards.set(enlist_benefit, True)
+    enlist_rewards = player.enlist_rewards.add(enlist_benefit)
     player = attr.evolve(player, enlist_rewards=enlist_rewards)
     game_state = set_player(game_state, player)
     if not player.can_enlist():

@@ -6,7 +6,7 @@ import game.state_change as sc
 import cProfile
 import logging
 
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.ERROR)
 
 ''' TODO list
  - all of the faction abilities
@@ -52,12 +52,17 @@ def play_one_game(num_players):
     return play_game(game_state, agents)
 
 
+def play_randomly_forever(num_players):
+    agents = [RandomAgent() for _ in range(num_players)]
+    while True:
+        game_state = GameState.from_num_players(num_players)
+        play_game(game_state, agents)
+
+
 if __name__ == '__main__':
     num_players = 2
-    play_one_game(num_players)
-
-    # agents = [RandomAgent() for _ in range(num_players)]
-    # while True:
+    # play_one_game(num_players)
+    play_randomly_forever(num_players)
     # mcts_wins = 0
     # for i in range(100):
     #     end_state = play_one_game(num_players)

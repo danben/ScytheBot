@@ -1,4 +1,5 @@
 import game.components.board as bd
+import game.constants as constants
 from game.types import TerrainType
 
 from collections import defaultdict
@@ -162,16 +163,16 @@ def score_farms_or_tundras_with_structures(board):
 
 
 class StructureBonus(Enum):
-    NEXT_TO_TUNNELS = 1
-    NEXT_TO_LAKES = 2
-    NEXT_TO_ENCOUNTERS = 3
-    ON_TUNNELS = 4
-    LONGEST_ROW_OF_STRUCTURES = 5
-    FARMS_OR_TUNDRAS_WITH_STRUCTURES = 6
+    NEXT_TO_TUNNELS = 0
+    NEXT_TO_LAKES = 1
+    NEXT_TO_ENCOUNTERS = 2
+    ON_TUNNELS = 3
+    LONGEST_ROW_OF_STRUCTURES = 4
+    FARMS_OR_TUNDRAS_WITH_STRUCTURES = 5
 
     @staticmethod
     def random():
-        return StructureBonus(random.randint(1, 6))
+        return StructureBonus(random.randint(0, constants.NUM_STRUCTURE_BONUSES - 1))
 
 
 score_functions = {StructureBonus.NEXT_TO_TUNNELS: score_next_to_tunnels,

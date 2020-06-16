@@ -4,10 +4,10 @@ from enum import Enum
 
 
 class Benefit(Enum):
-    POWER = 1
-    POPULARITY = 2
-    COMBAT_CARDS = 3
-    COINS = 4
+    POWER = 0
+    POPULARITY = 1
+    COMBAT_CARDS = 2
+    COINS = 3
 
     def __str__(self):
         if self is Benefit.POWER:
@@ -23,10 +23,10 @@ class Benefit(Enum):
 
 
 class BottomActionType(Enum):
-    UPGRADE = 1
-    DEPLOY = 2
-    BUILD = 3
-    ENLIST = 4
+    UPGRADE = 0
+    DEPLOY = 1
+    BUILD = 2
+    ENLIST = 3
 
     def __str__(self):
         if self is BottomActionType.UPGRADE:
@@ -42,18 +42,18 @@ class BottomActionType(Enum):
 
 
 class TopActionType(Enum):
-    MOVEGAIN = 1
-    BOLSTER = 2
-    PRODUCE = 3
-    TRADE = 4
+    MOVEGAIN = 0
+    BOLSTER = 1
+    PRODUCE = 2
+    TRADE = 3
 
 
 class FactionName(Enum):
-    RUSVIET = 1
-    CRIMEA = 2
-    NORDIC = 3
-    POLANIA = 4
-    SAXONY = 5
+    RUSVIET = 0
+    CRIMEA = 1
+    NORDIC = 2
+    POLANIA = 3
+    SAXONY = 4
 
     def __str__(self):
         if self is FactionName.RUSVIET:
@@ -71,10 +71,10 @@ class FactionName(Enum):
 
 
 class PieceType(Enum):
-    WORKER = 1
-    MECH = 2
-    CHARACTER = 3
-    STRUCTURE = 4
+    WORKER = 0
+    MECH = 1
+    CHARACTER = 2
+    STRUCTURE = 3
 
     def __str__(self):
         if self is PieceType.WORKER:
@@ -102,17 +102,17 @@ class PieceType(Enum):
 
 
 class MechType(Enum):
-    RIVERWALK = 1
-    TELEPORT = 2
-    COMBAT = 3
-    SPEED = 4
+    RIVERWALK = 0
+    TELEPORT = 1
+    COMBAT = 2
+    SPEED = 3
 
 
 class StructureType(Enum):
-    MILL = 1
-    MONUMENT = 2
-    MINE = 3
-    ARMORY = 4
+    MILL = 0
+    MONUMENT = 1
+    MINE = 2
+    ARMORY = 3
 
     def __str__(self):
         if self is StructureType.MILL:
@@ -153,11 +153,11 @@ class StructureType(Enum):
 
 
 class PlayerMatName(Enum):
-    INDUSTRIAL = 1
-    ENGINEERING = 2
-    PATRIOTIC = 3
-    MECHANICAL = 4
-    AGRICULTURAL = 5
+    INDUSTRIAL = 0
+    ENGINEERING = 1
+    PATRIOTIC = 2
+    MECHANICAL = 3
+    AGRICULTURAL = 4
 
     def __str__(self):
         if self is PlayerMatName.INDUSTRIAL:
@@ -175,10 +175,10 @@ class PlayerMatName(Enum):
 
 
 class ResourceType(Enum):
-    WOOD = 1
-    METAL = 2
-    OIL = 3
-    FOOD = 4
+    WOOD = 0
+    METAL = 1
+    OIL = 2
+    FOOD = 3
 
     def __str__(self):
         if self is ResourceType.WOOD:
@@ -194,15 +194,15 @@ class ResourceType(Enum):
 
 
 class StarType(Enum):
-    UPGRADE = 1
-    MECH = 2
-    STRUCTURE = 3
-    RECRUIT = 4
-    WORKER = 5
-    SECRET_OBJECTIVE = 6
-    COMBAT = 7
-    POPULARITY = 8
-    POWER = 9
+    UPGRADE = 0
+    MECH = 1
+    STRUCTURE = 2
+    RECRUIT = 3
+    WORKER = 4
+    SECRET_OBJECTIVE = 5
+    COMBAT = 6
+    POPULARITY = 7
+    POWER = 8
 
     def __str__(self):
         if self is StarType.UPGRADE:
@@ -231,14 +231,14 @@ class StarType(Enum):
 
 
 class TerrainType(Enum):
-    MOUNTAIN = 1
-    TUNDRA = 2
-    FARM = 3
-    FOREST = 4
-    VILLAGE = 5
-    FACTORY = 6
-    LAKE = 7
-    HOME_BASE = 8
+    MOUNTAIN = 0
+    TUNDRA = 1
+    FARM = 2
+    FOREST = 3
+    VILLAGE = 4
+    FACTORY = 5
+    LAKE = 6
+    HOME_BASE = 7
 
     def resource_typ(self):
         if self is TerrainType.MOUNTAIN:
