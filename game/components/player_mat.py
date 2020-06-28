@@ -12,7 +12,7 @@ import attr
 import logging
 import numpy as np
 
-from pyrsistent import pmap, pvector
+from pyrsistent import pmap, pset, pvector
 
 _starting_popularity = {PlayerMatName.INDUSTRIAL: 2,
                         PlayerMatName.ENGINEERING: 2,
@@ -87,8 +87,8 @@ class PlayerMat:
     starting_money = attr.ib()
     action_spaces = attr.ib()
     top_action_cubes_and_structures_by_top_action_typ = attr.ib()
-    has_enlisted_by_bottom_action_typ = attr.ib()
     action_spaces_by_bottom_action_typ = attr.ib()
+    has_enlisted_by_bottom_action_typ = attr.ib(factory=pset)
     last_action_spot_taken = attr.ib(default=None)
 
     @classmethod
@@ -98,13 +98,11 @@ class PlayerMat:
                   TopActionType.BOLSTER: TopActionCubesAndStructure.new(StructureType.MONUMENT, num_cubes=2),
                   TopActionType.MOVEGAIN: TopActionCubesAndStructure.new(StructureType.MINE, num_cubes=2),
                   TopActionType.PRODUCE: TopActionCubesAndStructure.new(StructureType.MILL, num_cubes=1)})
-        has_enlisted_by_bottom_action_typ = pmap({b: False for b in BottomActionType})
         action_spaces = _action_spaces[name]
         action_spaces_by_bottom_action_typ = pmap({a[1].bottom_action_typ: i for i, a in enumerate(action_spaces)})
 
         return cls(name, _starting_popularity[name], _starting_money[name], action_spaces,
-                   top_action_cubes_and_structures_by_top_action_typ, has_enlisted_by_bottom_action_typ,
-                   action_spaces_by_bottom_action_typ)
+                   top_action_cubes_and_structures_by_top_action_typ, action_spaces_by_bottom_action_typ)
 
     def move_pawn_to(self, i):
         if logging.getLogger().isEnabledFor(logging.DEBUG):
@@ -126,8 +124,8 @@ class PlayerMat:
         return attr.evolve(self, top_action_cubes_and_structures_by_top_action_typ=x)
 
     def enlist(self, bottom_action_typ):
-        assert not self.has_enlisted_by_bottom_action_typ[bottom_action_typ]
-        has_enlisted_by_bottom_action_typ = self.has_enlisted_by_bottom_action_typ.set(bottom_action_typ, True)
+        assert bottom_action_typ not in self.has_enlisted_by_bottom_action_typ
+        has_enlisted_by_bottom_action_typ = self.has_enlisted_by_bottom_action_typ.add(bottom_action_typ)
         return attr.evolve(self, has_enlisted_by_bottom_action_typ=has_enlisted_by_bottom_action_typ)
 
     def upgrade_bottom_action(self, bottom_action_typ):

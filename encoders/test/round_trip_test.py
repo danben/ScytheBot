@@ -1,10 +1,12 @@
-from game import constants, game_state
-from game.actions import Boolean, BottomAction, GetAttackerCombatCards, GetDefenderCombatCards, LoadResources
-from game.actions import LoadWorkers,  MaybePayCost, MovePieceOneSpace, Optional
-from game.components import piece as gc_piece
-from game.encoders import game_state as enc, actions as actions
-from game.types import Benefit, BottomActionType, MechType, StarType, StructureType, TopActionType
+from game import constants, game_state, state_change as sc
+from game.actions import Boolean, BottomAction, ChooseEnlistReward, GetAttackerCombatCards, GetDefenderCombatCards,\
+    LoadResources, LoadWorkers,  MaybePayCost, MovePieceOneSpace, Optional, PlaceCubeInAnyBottomSpace,\
+    RemoveCubeFromAnyTopSpace
+from encoders import actions as actions, game_state as enc
+from game.types import Benefit, BottomActionType, MechType, ResourceType, StarType, StructureType, TopActionType
 from collections import defaultdict
+
+import attr
 
 
 def one_hot_to_int(arr, lower, upper):
@@ -68,7 +70,7 @@ def check_player_mat(player, encoded_data, start_plane):
         encoded_cost = encoded_data[offset]
         encoded_has_enlisted = encoded_data[offset + 1]
         assert bottom_action.current_cost == int(encoded_cost * constants.MAX_BOTTOM_ACTION_COST)
-        assert player_mat.has_enlisted_by_bottom_action_typ[b] == encoded_has_enlisted
+        assert (b in player_mat.has_enlisted_by_bottom_action_typ) == encoded_has_enlisted
 
     encoded_last_action_spot = one_hot_to_int(encoded_data,
                                               start_plane + enc.EncodedPlayerMat.LAST_ACTION_SPOT_TAKEN_OFFSET,
@@ -106,36 +108,22 @@ def check_player(gs, encoded_data, indices_by_faction_name, index):
     check_misc_data(player, encoded_data, player_start)
     for b in Benefit:
         encoded_benefit = encoded_data[player_start + enc.EncodedPlayer.ENLIST_REWARDS_OFFSET + b.value]
-        if b in player.enlist_rewards:
-            assert encoded_benefit == 1
-        else:
-            assert encoded_benefit == 0
+        assert encoded_benefit == (b in player.enlist_rewards)
     for m in MechType:
         encoded_mech = encoded_data[player_start + enc.EncodedPlayer.MECHS_OFFSET + m.value]
-        if m.value in player.mech_ids:
-            assert encoded_mech == 1
-        else:
-            assert encoded_mech == 0
+        assert encoded_mech == (m.value in player.mech_ids)
     for s in StructureType:
         encoded_structure = encoded_data[player_start + enc.EncodedPlayer.STRUCTURES_OFFSET + s.value]
-        if s in player.structures:
-            assert encoded_structure == 1
-        else:
-            assert encoded_structure == 0
-    assert int(encoded_data[enc.EncodedPlayer.STAR_COUNT_OFFSET] * constants.NUM_STAR_TYPES) == player.stars.count
+        assert encoded_structure == (s in player.structures)
+    assert int(encoded_data[player_start + enc.EncodedPlayer.STAR_COUNT_OFFSET] * constants.NUM_STAR_TYPES)\
+        == player.stars.count
     for s in StarType:
         encoded_star_type = encoded_data[player_start + enc.EncodedPlayer.STAR_TYPES_OFFSET + s.value]
-        if player.stars.achieved[s]:
-            assert encoded_star_type == 1
-        else:
-            assert encoded_star_type == 0
+        assert encoded_star_type == player.stars.achieved[s]
 
         encoded_second_combat_star = encoded_data[player_start + enc.EncodedPlayer.STAR_TYPES_OFFSET
                                                   + constants.NUM_STAR_TYPES]
-        if player.stars.achieved[StarType.COMBAT] > 1:
-            assert encoded_second_combat_star == 1
-        else:
-            assert encoded_second_combat_star == 0
+        assert encoded_second_combat_star == (player.stars.achieved[StarType.COMBAT] > 1)
 
     if index == 0:
         for i in range(constants.MIN_COMBAT_CARD, constants.MAX_COMBAT_CARD + 1):
@@ -237,7 +225,7 @@ def check_space_for_faction(space, encoded_board, start_plane, faction_name):
             assert board_slice[start_plane + enc.BOARD_ENCODING__MILL_PLANE] == 1
 
 
-def check_space(gs, space, encoded_board, factions_by_index):
+def check_space(space, encoded_board, factions_by_index):
     row, col = space.coords
     for index in range(constants.MAX_PLAYERS):
         start_plane = index * enc.BOARD_ENCODING__PLANES_PER_PLAYER
@@ -259,7 +247,7 @@ def check_board(gs, encoded_board, indices_by_faction_name):
     factions_by_index = {index: faction for faction, index in indices_by_faction_name.items()}
     for space in gs.board.board_spaces_by_coords.values():
         if space.coords[0] >= 0:
-            check_space(gs, space, encoded_board, factions_by_index)
+            check_space(space, encoded_board, factions_by_index)
 
 
 def round_trip(gs):
@@ -278,11 +266,52 @@ def round_trip(gs):
 
 
 def round_trip_initial_state():
-    round_trip(game_state.GameState.from_num_players(2))
+    for i in range(2, constants.MAX_PLAYERS+1):
+        round_trip(game_state.GameState.from_num_players(i))
+
+
+def round_trip_with_extra_stuff():
+    gs = game_state.GameState.from_num_players(2)
+    # Things that aren't tested in the initial state test:
+    # - buildings on the map - done
+    # - mechs on the map - done
+    # - resources on the map - done
+    # - recruits enlisted - done
+    # - stars achieved - done
+    # - multiple pieces of the same kind in a space - done
+    # - multiple players' pieces in a space - done
+    # - upgrades - done
+    # - last action spot not being None
+    player_one = gs.players_by_idx[0]
+    player_two = gs.players_by_idx[1]
+    gs = sc.build_structure(gs, player_one, (5, 1), StructureType.MINE)
+    gs = sc.build_structure(gs, player_two, (3, 6), StructureType.MILL)
+    gs = sc.build_structure(gs, player_two, (1, 1), StructureType.MONUMENT)
+    gs = sc.deploy_mech(gs, player_one, MechType.COMBAT, (1, 1))
+    gs = sc.deploy_mech(gs, player_one, MechType.SPEED, (1, 1))
+    gs = sc.deploy_mech(gs, player_two, MechType.TELEPORT, (1, 1))
+    gs = sc.add_resources_to_space(gs, (0, 1), ResourceType.OIL, 4)
+    gs = sc.add_resources_to_space(gs, (0, 1), ResourceType.FOOD, 1)
+    gs = sc.add_resources_to_space(gs, (1, 1), ResourceType.WOOD, 2)
+    gs = sc.add_resources_to_space(gs, (0, 3), ResourceType.METAL, 9)
+    gs = ChooseEnlistReward.new(BottomActionType.BUILD).do(gs, Benefit.POPULARITY)
+    gs = RemoveCubeFromAnyTopSpace.new().do(gs, (TopActionType.TRADE, 0))
+    gs = PlaceCubeInAnyBottomSpace.new().do(gs, BottomActionType.DEPLOY)
+    gs = sc.achieve(gs, player_two, StarType.POPULARITY)
+    gs = sc.achieve(gs, player_one, StarType.COMBAT)
+    gs = sc.achieve(gs, player_one, StarType.COMBAT)
+    player_one = attr.evolve(player_one, player_mat=player_one.player_mat.move_pawn_to(0))
+    gs = sc.set_player(gs, player_one)
+    player_two = attr.evolve(player_two, player_mat=player_two.player_mat.move_pawn_to(3))
+    gs = sc.set_player(gs, player_two)
+    round_trip(gs)
+    gs = sc.end_turn(gs)
+    round_trip(gs)
 
 
 def run_tests():
     round_trip_initial_state()
+    round_trip_with_extra_stuff()
 
 
 if __name__ == '__main__':

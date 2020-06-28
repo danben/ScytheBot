@@ -2,7 +2,7 @@ import game.components.piece as gc_piece
 import game.components.player_mat as gc_player_mat
 import game.state_change as sc
 from game import constants
-from game.types import Benefit, FactionName, MechType, PieceType, StarType, TerrainType
+from game.types import Benefit, BottomActionType, FactionName, MechType, PieceType, StarType, TerrainType
 
 import attr
 import logging
@@ -52,7 +52,6 @@ class Player:
     home_base = attr.ib()
     adjacencies = attr.ib()
     worker_ids = attr.ib(default=pset())
-    # TODO: No reason this needs to be a pmap
     enlist_rewards = attr.ib(default=pset())
     mech_ids = attr.ib(default=pset())
     structures = attr.ib(default=pset())
@@ -100,7 +99,7 @@ class Player:
             assert coords
         for coords in sc.board_coords_with_structures(game_state, self):
             assert coords
-        assert len(self.enlist_rewards) == sum(self.player_mat.has_enlisted_by_bottom_action_typ.values())
+        assert len(self.enlist_rewards) == len(self.player_mat.has_enlisted_by_bottom_action_typ)
 
     # def resources_string(self, board):
     #     return ''.join([f'{r} : {self.available_resources(r, board)}; ' for r in ResourceType])
@@ -179,13 +178,13 @@ class Player:
         return len(self.enlist_rewards) < constants.NUM_ENLIST_BENEFITS
 
     def unenlisted_bottom_action_typs(self):
-        return [b for b, enlisted in self.player_mat.has_enlisted_by_bottom_action_typ.items() if not enlisted]
+        return [b for b in BottomActionType if b not in self.player_mat.has_enlisted_by_bottom_action_typ]
 
     def available_enlist_rewards(self):
         return [benefit for benefit in Benefit if benefit not in self.enlist_rewards]
 
     def has_enlisted(self, bottom_action_typ):
-        return self.player_mat.has_enlisted_by_bottom_action_typ[bottom_action_typ]
+        return bottom_action_typ in self.player_mat.has_enlisted_by_bottom_action_typ
 
     def top_action_typs_with_unbuilt_structures(self):
         return [t for t, x in self.player_mat.top_action_cubes_and_structures_by_top_action_typ.items()

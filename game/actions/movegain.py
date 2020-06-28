@@ -21,7 +21,7 @@ class LoadResources(Choice):
         return list(range(amt+1))
 
     def choose(self, agent, game_state):
-        return agent.choose_numeric(game_state, self.choices(game_state))
+        return agent.choose_num_resources(game_state, self.choices(game_state))
 
     def do(self, game_state, amt):
         if amt:
@@ -48,7 +48,7 @@ class LoadWorkers(Choice):
         return list(range(len(space.worker_keys)+1))
 
     def choose(self, agent, game_state):
-        return agent.choose_numeric(game_state, self.choices(game_state))
+        return agent.choose_num_workers(game_state, self.choices(game_state))
 
     def do(self, game_state, amt):
         if not amt:
@@ -222,8 +222,9 @@ class MoveOnePiece(Choice):
         # check to see that we're not starting in enemy territory. There would be no legal way for a mech
         # or character to start in enemy territory anyway.
         current_player = sc.get_current_player(game_state)
-        return [piece for piece in sc.movable_pieces(game_state, current_player)
-                if sc.controller(game_state, game_state.board.get_space(piece.board_coords))
+        return [board_coords_and_piece_typ
+                for board_coords_and_piece_typ in sc.movable_pieces(game_state, current_player)
+                if sc.controller(game_state, game_state.board.get_space(board_coords_and_piece_typ[0]))
                 is current_player.faction_name()]
 
     def choose(self, agent, game_state):
@@ -234,14 +235,14 @@ class MoveOnePiece(Choice):
             return None
         return agent.choose_piece(game_state, movable_pieces)
 
-    def do(self, game_state, piece):
-        if not piece:
+    def do(self, game_state, board_coords_and_piece_typ):
+        if not board_coords_and_piece_typ:
             logging.debug('No movable pieces')
             return game_state
         if logging.getLogger().isEnabledFor(logging.DEBUG):
-            logging.debug(f'Chosen: {piece}')
-        piece_key = piece.key()
-        for _ in range(sc.get_current_player(game_state).base_move_for_piece_typ(piece.typ) - 1):
+            logging.debug(f'Chosen: {board_coords_and_piece_typ}')
+        piece_key = sc.get_piece_by_board_coords_and_piece_typ(game_state, *board_coords_and_piece_typ)
+        for _ in range(sc.get_current_player(game_state).base_move_for_piece_typ(piece_key.piece_typ) - 1):
             game_state = sc.push_action(game_state, Optional.new(LoadAndMovePiece.new(piece_key)))
         return sc.push_action(game_state, LoadAndMovePiece.new(piece_key))
 

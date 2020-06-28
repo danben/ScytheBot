@@ -61,4 +61,4 @@ _move_cube_to_bottom = MoveCubeToBottom.new()
 
 def action(maxcost, mincost, payoff):
     return BottomAction.new(BottomActionType.UPGRADE, ResourceType.OIL, maxcost, mincost, payoff,
-                              Benefit.POWER, _move_cube_to_bottom)
+                            Benefit.POWER, _move_cube_to_bottom)

@@ -69,6 +69,7 @@ class Boolean(Choice):
         return sc.push_action(game_state, chosen)
 
     def choices(self, game_state):
+        # The order MUST NOT change, or the results of the model will be misinterpreted
         return [self.action1, self.action2]
 
 
@@ -92,6 +93,7 @@ class Optional(Choice):
             return game_state
 
     def choices(self, game_state):
+        # The order MUST NOT change, or the results of the model will be misinterpreted
         return [False, True]
 
 
@@ -114,6 +116,7 @@ class MaybePayCost(Choice, ABC):
         pass
 
     def choices(self, game_state):
+        # The order MUST NOT change, or the results of the model will be misinterpreted
         return [False, True]
 
     def choose(self, agent, game_state):

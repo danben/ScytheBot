@@ -19,7 +19,7 @@ class ChooseNumWorkers(Choice):
         return list(range(1, self.max_workers+1))
 
     def choose(self, agent, game_state):
-        return agent.choose_numeric(game_state, self.choices(game_state))
+        return agent.choose_num_workers(game_state, self.choices(game_state))
 
     def do(self, game_state, amt):
         if not amt:

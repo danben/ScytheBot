@@ -211,7 +211,7 @@ _board_spaces = [
     [None, None, None, _village((7, 3)), None, None, None]]
 
 
-def on_the_board (row, col):
+def on_the_board(row, col):
     return 0 <= row < constants.BOARD_ROWS and 0 <= col < constants.BOARD_COLS
 
 

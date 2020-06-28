@@ -51,4 +51,4 @@ _choose_structure_to_build = ChooseStructureToBuild.new()
 
 def action(maxcost, mincost, payoff):
     return BottomAction.new(BottomActionType.BUILD, ResourceType.WOOD, maxcost, mincost, payoff,
-                              Benefit.POPULARITY, _choose_structure_to_build)
+                            Benefit.POPULARITY, _choose_structure_to_build)

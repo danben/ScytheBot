@@ -15,10 +15,6 @@ class Agent(ABC):
         pass
 
     @abstractmethod
-    def choose_numeric(self, game_state, choices):
-        pass
-
-    @abstractmethod
     def choose_board_coords(self, game_state, choices):
         pass
 
@@ -52,4 +48,16 @@ class Agent(ABC):
 
     @abstractmethod
     def choose_optional_combat_card(self, game_state, choices):
+        pass
+
+    @abstractmethod
+    def choose_num_workers(self, game_state, choices):
+        pass
+
+    @abstractmethod
+    def choose_combat_wheel_power(self, game_state, choices):
+        pass
+
+    @abstractmethod
+    def choose_num_resources(self, game_state, choices):
         pass

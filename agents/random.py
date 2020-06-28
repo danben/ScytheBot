@@ -1,4 +1,4 @@
-from game.agents import Agent
+from agents import Agent
 from game.types import ResourceType
 
 import logging
@@ -27,11 +27,20 @@ class RandomAgent(Agent):
             logging.debug(f'Available choices: {choices}')
         return np.random.choice(choices)
 
+    def choose_num_resources(self, game_state, choices):
+        return self.choose_numeric(game_state, choices)
+
+    def choose_num_workers(self, game_state, choices):
+        return self.choose_numeric(game_state, choices)
+
+    def choose_combat_wheel_power(self, game_state, choices):
+        return self.choose_numeric(game_state, choices)
+
     def choose_board_coords(self, game_state, choices):
         return choices[np.random.randint(len(choices))]
 
     def choose_piece(self, game_state, choices):
-        return np.random.choice(choices)
+        return choices[np.random.randint(len(choices))]
 
     def choose_resource_typ(self, game_state, choices):
         return np.random.choice([r for r in ResourceType])
@@ -54,5 +63,5 @@ class RandomAgent(Agent):
     def choose_optional_combat_card(self, game_state, choices):
         return np.random.choice([None] + choices)
 
-    def choose_optional_resource_typ(self, game_state, choices):
+    def choose_optional_resource_typ(self, _game_state, choices):
         return np.random.choice([None] + choices)

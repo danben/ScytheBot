@@ -578,13 +578,19 @@ def movable_pieces(game_state, player):
     s = set()
     for worker_id in player.worker_ids:
         worker = game_state.pieces_by_key[gc_piece.worker_key(player.faction_name(), worker_id)]
-        if game_state.board.get_space(worker.board_coords).terrain_typ is not TerrainType.LAKE \
+        if (not worker.moved_this_turn) \
+                and game_state.board.get_space(worker.board_coords).terrain_typ is not TerrainType.LAKE \
                 and adjacent_space_coords_without_enemies(game_state, worker):
-            s.add(worker)
+            s.add((worker.board_coords, PieceType.WORKER))
     for mech_id in player.mech_ids:
-        s.add(game_state.pieces_by_key[gc_piece.mech_key(player.faction_name(), mech_id)])
-    s.add(game_state.pieces_by_key[gc_piece.character_key(player.faction_name())])
-    return [piece for piece in s if not piece.moved_this_turn]
+        mech = game_state.pieces_by_key[gc_piece.mech_key(player.faction_name(), mech_id)]
+        if not mech.moved_this_turn:
+            s.add((mech.board_coords, PieceType.MECH))
+
+    character = game_state.pieces_by_key[gc_piece.character_key(player.faction_name())]
+    if not character.moved_this_turn:
+        s.add((character.board_coords, PieceType.CHARACTER))
+    return s
 
 
 def effective_adjacent_space_coords(game_state, piece_key):
@@ -659,3 +665,19 @@ def move_piece(game_state, piece_key, to_coords):
     game_state = set_piece(game_state, piece)
     game_state = attr.evolve(game_state, board=board)
     return game_state
+
+
+def get_piece_by_board_coords_and_piece_typ(game_state, board_coords, piece_typ):
+    space = game_state.board.get_space(board_coords)
+    faction_name = get_current_player(game_state).faction_name()
+    key_set = space.character_keys
+    if piece_typ is PieceType.MECH:
+        key_set = space.mech_keys
+    elif piece_typ is PieceType.WORKER:
+        key_set = space.worker_keys
+    elif piece_typ is PieceType.STRUCTURE:
+        assert False
+    for key in key_set:
+        if key.faction_name is faction_name:
+            return key
+    assert False

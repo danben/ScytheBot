@@ -1,9 +1,8 @@
-from game.agents import MCTSAgent, RandomAgent
+from agents import MCTSAgent, RandomAgent
 from game.game_state import GameState
 import game.play as play
 import game.state_change as sc
 
-import cProfile
 import logging
 
 logging.basicConfig(level=logging.ERROR)

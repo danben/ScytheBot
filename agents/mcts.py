@@ -1,13 +1,11 @@
 from game import play
-from game.agents import Agent
-from game.agents.random import RandomAgent
+from agents import Agent
+from agents.random import RandomAgent
 import game.state_change as sc
 
 import logging
 import math
 import random
-
-from game.actions.produce import OnOneHex
 
 
 def uct_score(parent_rollouts, child_rollouts, win_pct, temperature):
@@ -126,7 +124,13 @@ class MCTSAgent(Agent):
     def choose_boolean(self, game_state):
         return self.select_move(game_state, [False, True])
 
-    def choose_numeric(self, game_state, choices):
+    def choose_num_resources(self, game_state, choices):
+        return self.select_move(game_state, choices)
+
+    def choose_num_workers(self, game_state, choices):
+        return self.select_move(game_state, choices)
+
+    def choose_combat_wheel_power(self, game_state, choices):
         return self.select_move(game_state, choices)
 
     def choose_board_coords(self, game_state, choices):

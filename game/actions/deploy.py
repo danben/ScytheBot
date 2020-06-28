@@ -44,4 +44,4 @@ _deploy_mech = DeployMech.new()
 
 def action(maxcost, mincost, payoff):
     return BottomAction.new(BottomActionType.DEPLOY, ResourceType.METAL, maxcost, mincost, payoff,
-                              Benefit.COINS, _deploy_mech)
+                            Benefit.COINS, _deploy_mech)

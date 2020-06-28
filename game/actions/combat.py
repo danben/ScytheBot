@@ -94,7 +94,7 @@ class GetDefenderWheelPower(Choice):
         return list(range(min(MAX_COMBAT_POWER, defending_player.power)+1))
 
     def choose(self, agent, game_state):
-        return agent.choose_numeric(game_state, self.choices(game_state))
+        return agent.choose_combat_wheel_power(game_state, self.choices(game_state))
 
     def do(self, game_state, power):
         game_state = sc.remove_power(game_state, sc.get_player_by_faction_name(game_state, self.defending_faction_name),
@@ -172,7 +172,7 @@ class GetAttackerWheelPower(Choice):
         return list(range(min(MAX_COMBAT_POWER, attacking_player.power)+1))
 
     def choose(self, agent, game_state):
-        return agent.choose_numeric(game_state, self.choices(game_state))
+        return agent.choose_combat_wheel_power(game_state, self.choices(game_state))
 
     def do(self, game_state, power):
         game_state = sc.remove_power(game_state, sc.get_player_by_faction_name(game_state, self.attacking_faction_name),

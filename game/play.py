@@ -26,19 +26,21 @@ def finalize(game_state):
     return game_state
 
 
+_take_turn = TakeTurn()
+
+
 def apply_move(game_state, move):
     try:
         game_state, next_action = sc.pop_action(game_state)
         assert isinstance(next_action, Choice)
         game_state = next_action.apply(game_state, move)
-        tt = TakeTurn()
         while game_state.action_stack and isinstance(game_state.action_stack.first, StateChange):
             # get_current_player(game_state).invariant(game_state)
             game_state, next_action = sc.pop_action(game_state)
             game_state = next_action.apply(game_state)
         if not game_state.action_stack:
             game_state = sc.end_turn(game_state)
-            game_state = sc.push_action(game_state, tt)
+            game_state = sc.push_action(game_state, _take_turn)
             if game_state.num_turns == 50:
                 # logging.info("50 turns without a winner")
                 return finalize(game_state)
