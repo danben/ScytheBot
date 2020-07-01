@@ -1,4 +1,4 @@
-import game.actions.action as action
+import game.actions as actions
 import game.components.piece as gc_piece
 import game.constants as constants
 from game.exceptions import GameOver
@@ -12,7 +12,7 @@ from pyrsistent import pmap, pset, thaw, PVector
 
 
 def push_action(game_state, to_push):
-    if not isinstance(to_push, action.Action):
+    if not isinstance(to_push, actions.Action):
         raise Exception("bad")
     return attr.evolve(game_state, action_stack=game_state.action_stack.cons(to_push))
 
@@ -332,7 +332,7 @@ def charge_player(game_state, player, cost):
         amount_owed = cost.resource_cost[resource_typ]
         if amount_owned > amount_owed:
             for _ in range(amount_owed):
-                game_state = push_action(game_state, action.SpendAResource.new(player.id, resource_typ))
+                game_state = push_action(game_state, actions.SpendAResource.new(player.id, resource_typ))
         else:
             assert amount_owned == cost.resource_cost[resource_typ]
             game_state = remove_all_of_this_resource(game_state, player, resource_typ)

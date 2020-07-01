@@ -5,6 +5,7 @@ import game.play as play
 import game.state_change as sc
 
 import cProfile
+import keras.backend as K
 import tensorflow as tf
 import logging
 
@@ -21,7 +22,7 @@ logging.basicConfig(level=logging.ERROR)
 
 def play_game(game_state, agents):
     logging.debug('\nNEW GAME\n')
-    while not game_state.winner:
+    while not game_state.is_over():
         # logging.debug(f'Board: {game_state.board}')
         agent = agents[game_state.current_player_idx]
         chosen = agent.select_move(game_state)
@@ -49,10 +50,14 @@ def play_game(game_state, agents):
 def play_one_game(num_players):
     game_state = GameState.from_num_players(num_players)
     players = list(map(lambda x: x.faction_name(), game_state.players_by_idx))
+    K.set_floatx('float16')
+    K.set_epsilon(1e-4)
+    K.set_learning_phase(0)
 
     # V1
     physical_devices = tf.config.experimental.list_physical_devices('GPU')
     tf.config.experimental.set_memory_growth(physical_devices[0], True)
+    # tf.compat.v1.config.optimizer.set_experimental_options({'layout_optimizer':True})
 
     # V2
     # physical_devices = tf.config.list_physical_devices('GPU')
