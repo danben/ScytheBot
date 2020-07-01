@@ -17,9 +17,6 @@ class ChooseEnlistReward(Choice):
     def choices(self, game_state):
         return sc.get_current_player(game_state).available_enlist_rewards()
 
-    def choose(self, agent, game_state):
-        return agent.choose_enlist_reward(game_state, self.choices(game_state))
-
     def do(self, game_state, enlist_reward):
         current_player = sc.get_current_player(game_state)
         logging.debug(f'{current_player} enlists the {self.bottom_action_typ} recruit, \
@@ -40,9 +37,6 @@ class ChooseRecruitToEnlist(Choice):
 
     def choices(self, game_state):
         return sc.get_current_player(game_state).unenlisted_bottom_action_typs()
-
-    def choose(self, agent, game_state):
-        return agent.choose_bottom_action_typ(game_state, self.choices(game_state))
 
     def do(self, game_state, bottom_action_typ):
         return sc.push_action(game_state, ChooseEnlistReward.new(bottom_action_typ))

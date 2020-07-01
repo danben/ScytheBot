@@ -15,9 +15,6 @@ class RemoveCubeFromAnyTopSpace(Choice):
     def choices(self, game_state):
         return sc.get_current_player(game_state).cube_spaces_not_fully_upgraded()
 
-    def choose(self, agent, game_state):
-        return agent.choose_cube_space_to_upgrade(game_state, self.choices(game_state))
-
     def do(self, game_state, top_action_typ_and_pos):
         top_action_typ, pos = top_action_typ_and_pos
         if logging.getLogger().isEnabledFor(logging.DEBUG):
@@ -33,9 +30,6 @@ class PlaceCubeInAnyBottomSpace(Choice):
 
     def choices(self, game_state):
         return sc.get_current_player(game_state).bottom_action_typs_not_fully_upgraded()
-
-    def choose(self, agent, game_state):
-        return agent.choose_bottom_action_typ(game_state, self.choices(game_state))
 
     def do(self, game_state, bottom_action_typ):
         if logging.getLogger().isEnabledFor(logging.DEBUG):

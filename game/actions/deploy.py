@@ -16,9 +16,6 @@ class ChooseDeploySpace(Choice):
     def choices(self, game_state):
         return list(sc.board_coords_with_workers(game_state, sc.get_current_player(game_state)))
 
-    def choose(self, agent, game_state):
-        return agent.choose_board_coords(game_state, self.choices(game_state))
-
     def do(self, game_state, board_coords):
         return sc.deploy_mech(game_state, sc.get_current_player(game_state), self.mech_typ, board_coords)
 
@@ -31,9 +28,6 @@ class DeployMech(Choice):
 
     def choices(self, game_state):
         return sc.get_current_player(game_state).undeployed_mech_typs()
-
-    def choose(self, agent, game_state):
-        return agent.choose_mech_typ_to_deploy(game_state, self.choices(game_state))
 
     def do(self, game_state, mech_typ):
         return sc.push_action(game_state, ChooseDeploySpace.new(mech_typ))

@@ -20,9 +20,6 @@ class LoadResources(Choice):
         amt = game_state.board.get_space(piece.board_coords).amount_of(self.resource_typ)
         return list(range(amt+1))
 
-    def choose(self, agent, game_state):
-        return agent.choose_num_resources(game_state, self.choices(game_state))
-
     def do(self, game_state, amt):
         if amt:
             piece = game_state.pieces_by_key[self.piece_key]
@@ -46,9 +43,6 @@ class LoadWorkers(Choice):
         board_coords = sc.get_board_coords_for_piece_key(game_state, self.mech_key)
         space = game_state.board.get_space(board_coords)
         return list(range(len(space.worker_keys)+1))
-
-    def choose(self, agent, game_state):
-        return agent.choose_num_workers(game_state, self.choices(game_state))
 
     def do(self, game_state, amt):
         if not amt:
@@ -159,14 +153,9 @@ class MovePieceOneSpace(Choice):
         return cls(f'Move {piece_key} one space', piece_key)
 
     def choices(self, game_state):
-        return sc.effective_adjacent_space_coords(game_state, self.piece_key)
-
-    def choose(self, agent, game_state):
-        effective_adjacent_space_coords = self.choices(game_state)
-        if logging.getLogger().isEnabledFor(logging.DEBUG):
-            logging.debug(f'Choosing from {effective_adjacent_space_coords}')
-        assert game_state.pieces_by_key[self.piece_key].board_coords not in effective_adjacent_space_coords
-        return agent.choose_board_coords(game_state, effective_adjacent_space_coords)
+        ret = sc.effective_adjacent_space_coords(game_state, self.piece_key)
+        assert game_state.pieces_by_key[self.piece_key].board_coords not in ret
+        return ret
 
     def do(self, game_state, board_coords):
         assert self.piece_key in \
@@ -222,18 +211,13 @@ class MoveOnePiece(Choice):
         # check to see that we're not starting in enemy territory. There would be no legal way for a mech
         # or character to start in enemy territory anyway.
         current_player = sc.get_current_player(game_state)
-        return [board_coords_and_piece_typ
-                for board_coords_and_piece_typ in sc.movable_pieces(game_state, current_player)
-                if sc.controller(game_state, game_state.board.get_space(board_coords_and_piece_typ[0]))
-                is current_player.faction_name()]
-
-    def choose(self, agent, game_state):
-        movable_pieces = self.choices(game_state)
-        if logging.getLogger().isEnabledFor(logging.DEBUG):
-            logging.debug(f'Choosing a piece from {"; ".join([str(piece) for piece in movable_pieces])}')
-        if not movable_pieces:
+        ret = [board_coords_and_piece_typ
+               for board_coords_and_piece_typ in sc.movable_pieces(game_state, current_player)
+               if sc.controller(game_state, game_state.board.get_space(board_coords_and_piece_typ[0]))
+               is current_player.faction_name()]
+        if not ret:
             return None
-        return agent.choose_piece(game_state, movable_pieces)
+        return ret
 
     def do(self, game_state, board_coords_and_piece_typ):
         if not board_coords_and_piece_typ:

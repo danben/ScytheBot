@@ -5,18 +5,18 @@ import training.constants as c
 
 
 def decode_based_on_ordering(choices, head):
-    return {choice: head[i] for i, choice in enumerate(choices)}
+    return {choice: head[0][i] for i, choice in enumerate(choices)}
 
 
 def decode_based_on_enum_values(choices, head):
-    return {choice: head[choice.value] for choice in choices}
+    return {choice: head[0][choice.value] for choice in choices}
 
 
 def decode_board_space(head, row, col):
     if row >= 0:
-        return head[row * constants.BOARD_COLS + col]
+        return head[0][row * constants.BOARD_COLS + col]
     else:
-        return head[constants.BOARD_ROWS * constants.BOARD_COLS + col]
+        return head[0][constants.BOARD_ROWS * constants.BOARD_COLS + col]
 
 
 def decode_board_spaces(choices, head):
@@ -27,20 +27,20 @@ def decode_board_spaces(choices, head):
 
 
 def decode_optional_combat_cards(choices, head):
-    ret = {choice: head[choice - constants.MIN_COMBAT_CARD] for choice in choices}
-    ret[None] = head[constants.MAX_COMBAT_CARD - 1]
+    ret = {choice: head[0][choice - constants.MIN_COMBAT_CARD] for choice in choices}
+    ret[None] = head[0][constants.MAX_COMBAT_CARD - 1]
     return ret
 
 
 def decode_numeric(choices, head):
-    return {choice: head[choice] for choice in choices}
+    return {choice: head[0][choice] for choice in choices}
 
 
 def decode_top_cube_spaces(choices, head):
     ret = {}
     for choice in choices:
         top_action_typ, offset = choice
-        ret[choice] = head[enc_gs.EncodedPlayerMat.TOP_ACTION_CUBES_OFFSETS_BY_TOP_ACTION_TYPE[top_action_typ] + offset]
+        ret[choice] = head[0][enc_gs.EncodedPlayerMat.TOP_ACTION_CUBES_OFFSETS_BY_TOP_ACTION_TYPE[top_action_typ] + offset]
     return ret
 
 
@@ -116,14 +116,12 @@ def get_board_coords_and_piece_typ_priors(choices, board_coord_preds, piece_typ_
     move_priors = {}
     for board_coords, piece_typ in choices:
         move_priors[(board_coords, piece_typ)] = decode_board_space(board_coord_preds, *board_coords)\
-            * piece_typ_preds[piece_typ.value]
+            * piece_typ_preds[0][piece_typ.value]
     return move_priors
 
 
-def get_move_priors(preds, game_state):
-    top_action = game_state.action_stack.first
-    choices = top_action.choices(game_state)
-    if top_action.__class__ is MoveOnePiece:
+def get_move_priors(preds, top_action_class, choices):
+    if top_action_class is MoveOnePiece:
         return get_board_coords_and_piece_typ_priors(choices, preds[c.BOARD_COORDS_HEAD], preds[c.PIECE_TYP_HEAD])
     else:
-        return _decoders[top_action.__class__](choices, preds[_model_head_by_action_class[top_action.__class__]])
+        return _decoders[top_action_class](choices, preds[_model_head_by_action_class[top_action_class]])

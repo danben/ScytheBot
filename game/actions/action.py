@@ -36,10 +36,6 @@ class StateChange(Action, ABC):
 @attr.s(frozen=True, slots=True)
 class Choice(Action, ABC):
     @abstractmethod
-    def choose(self, agent, game_state):
-        pass
-
-    @abstractmethod
     def do(self, game_state, chosen):
         pass
 
@@ -62,9 +58,6 @@ class Boolean(Choice):
     def new(cls, action1, action2):
         return cls(f'Choosing between {action1.name} and {action2.name}', action1, action2)
 
-    def choose(self, agent, game_state):
-        return agent.choose_action(game_state, [self.action1, self.action2])
-
     def do(self, game_state, chosen):
         return sc.push_action(game_state, chosen)
 
@@ -80,9 +73,6 @@ class Optional(Choice):
     @classmethod
     def new(cls, action):
         return cls(f'Optional: {action.name}', action)
-
-    def choose(self, agent, game_state):
-        return agent.choose_boolean(game_state)
 
     def do(self, game_state, chosen):
         if chosen:
@@ -116,13 +106,10 @@ class MaybePayCost(Choice, ABC):
         pass
 
     def choices(self, game_state):
+        if self.cost(game_state).is_free():
+            return [True]
         # The order MUST NOT change, or the results of the model will be misinterpreted
         return [False, True]
-
-    def choose(self, agent, game_state):
-        if self.cost(game_state).is_free():
-            return True
-        return agent.choose_boolean(game_state)
 
     def do(self, game_state, chosen):
         if chosen:
@@ -157,9 +144,6 @@ class SpendAResource(Choice):
                                                              self.resource_typ)
         return list(map(lambda x: x.coords, eligible_spaces))
 
-    def choose(self, agent, game_state):
-        return agent.choose_board_coords(game_state, self.choices(game_state))
-
     def do(self, game_state, chosen):
         if logging.getLogger().isEnabledFor(logging.DEBUG):
             logging.debug(f'1 from {chosen}')
@@ -179,10 +163,8 @@ class CrimeaMaybeChooseResource(Choice):
         return cls('Crimea can choose to substitute a combat card for a resource', cost)
 
     def choices(self, game_state):
-        return sc.get_current_player(game_state).owned_resource_typs()
-
-    def choose(self, agent, game_state):
-        return agent.choose_optional_resource_typ(game_state, self.choices(game_state))
+        owned_resource_types = sc.get_current_player(game_state).owned_resource_typs()
+        owned_resource_types.append(None)
 
     def do(self, game_state, chosen):
         if chosen:
@@ -276,9 +258,6 @@ class BottomActionIfPaid(StateChange):
     def new(cls, bottom_action_typ, coins_payoff, enlist_benefit, action_benefit):
         return cls(f'Attempting bottom action: {bottom_action_typ}', bottom_action_typ, coins_payoff, enlist_benefit,
                    action_benefit)
-
-    def choose(self, agent, game_state):
-        pass
 
     def do(self, game_state):
         current_player = sc.get_current_player(game_state)

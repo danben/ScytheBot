@@ -1,6 +1,7 @@
 from game.actions import Choice, MaybePayCost, StateChange
 from game.actions.take_turn import TakeTurn
 from game.exceptions import GameOver
+import game.constants as constants
 import game.state_change as sc
 import game.components.structure_bonus as gc_structure_bonus
 
@@ -40,10 +41,9 @@ def apply_move(game_state, move):
             game_state = next_action.apply(game_state)
         if not game_state.action_stack:
             game_state = sc.end_turn(game_state)
-            game_state = sc.push_action(game_state, _take_turn)
-            if game_state.num_turns == 50:
-                # logging.info("50 turns without a winner")
+            if game_state.num_turns == constants.MAX_TURNS_PER_PLAYER * len(game_state.players_by_idx):
                 return finalize(game_state)
+            game_state = sc.push_action(game_state, _take_turn)
         elif isinstance(game_state.action_stack.first, MaybePayCost) and \
                 not sc.can_pay_cost(game_state, sc.get_current_player(game_state),
                                     game_state.action_stack.first.cost(game_state)):

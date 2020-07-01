@@ -17,9 +17,6 @@ class ChooseBoardSpaceForResource(Choice):
         current_player = sc.get_current_player(game_state)
         return list(sc.board_coords_with_workers(game_state, current_player))
 
-    def choose(self, agent, game_state):
-        return agent.choose_board_coords(game_state, self.choices(game_state))
-
     def do(self, game_state, chosen):
         space = game_state.board.get_space(chosen).add_resources(self.resource_typ, 1)
         return attr.evolve(game_state, board=game_state.board.set_space(space))
@@ -27,15 +24,14 @@ class ChooseBoardSpaceForResource(Choice):
 
 @attr.s(frozen=True, slots=True)
 class ChooseResourceType(Choice):
+    __all_resource_types = [x for x in ResourceType]
+
     @classmethod
     def new(cls):
         return cls('Choose resource type')
 
     def choices(self, game_state):
-        return [x for x in ResourceType]
-
-    def choose(self, agent, game_state):
-        return agent.choose_resource_typ(game_state, self.choices(game_state))
+        return ChooseResourceType.__all_resource_types
 
     def do(self, game_state, chosen):
         return sc.push_action(game_state, ChooseBoardSpaceForResource.new(chosen))

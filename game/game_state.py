@@ -91,5 +91,7 @@ class GameState:
         return self.winner is not None
 
     def legal_moves(self):
-        assert len(self.action_stack) and isinstance(self.action_stack.first, Choice)
+        if not self.action_stack:
+            return []
+        assert isinstance(self.action_stack.first, Choice)
         return self.action_stack.first.choices(self)

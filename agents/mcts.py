@@ -67,9 +67,10 @@ class MCTSAgent(Agent):
 
         return game_state.winner
 
-    def select_move(self, game_state, choices):
+    def select_move(self, game_state):
         old_level = logging.getLogger().level
         logging.getLogger().setLevel(logging.ERROR)
+        choices = game_state.legal_moves()
         if not choices:
             logging.getLogger().setLevel(old_level)
             return None
@@ -114,48 +115,3 @@ class MCTSAgent(Agent):
                 best_score = score
                 best_child = child
         return best_child
-
-    def choose_action(self, game_state, choices):
-        return self.select_move(game_state, choices)
-
-    def choose_action_spot(self, game_state, choices):
-        return self.select_move(game_state, choices)
-
-    def choose_boolean(self, game_state):
-        return self.select_move(game_state, [False, True])
-
-    def choose_num_resources(self, game_state, choices):
-        return self.select_move(game_state, choices)
-
-    def choose_num_workers(self, game_state, choices):
-        return self.select_move(game_state, choices)
-
-    def choose_combat_wheel_power(self, game_state, choices):
-        return self.select_move(game_state, choices)
-
-    def choose_board_coords(self, game_state, choices):
-        return self.select_move(game_state, choices)
-
-    def choose_piece(self, game_state, choices):
-        return self.select_move(game_state, choices)
-
-    def choose_resource_typ(self, game_state, choices):
-        return self.select_move(game_state, choices)
-
-    def choose_bottom_action_typ(self, game_state, choices):
-        return self.select_move(game_state, choices)
-
-    def choose_enlist_reward(self, game_state, choices):
-        return self.select_move(game_state, choices)
-
-    def choose_mech_typ_to_deploy(self, game_state, choices):
-        return self.select_move(game_state, choices)
-
-    def choose_structure_typ(self, game_state, choices):
-        return self.select_move(game_state, choices)
-
-    def choose_cube_space_to_upgrade(self, game_state, choices):
-        return self.select_move(game_state, choices)
-
-    def choose_optional_combat_card(self, game_state, choices):
-        return self.select_move(game_state, choices)

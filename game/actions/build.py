@@ -17,9 +17,6 @@ class ChooseSpaceToBuildOn(Choice):
     def choices(self, game_state):
         return sc.legal_building_spots(game_state, sc.get_current_player(game_state))
 
-    def choose(self, agent, game_state):
-        return agent.choose_board_coords(game_state, self.choices(game_state))
-
     def do(self, game_state, board_coords):
         assert game_state.board.get_space(board_coords).terrain_typ is not TerrainType.HOME_BASE
         if logging.getLogger().isEnabledFor(logging.DEBUG):
@@ -38,9 +35,6 @@ class ChooseStructureToBuild(Choice):
         top_action_typs_with_unbuilt_structures = \
             sc.get_current_player(game_state).top_action_typs_with_unbuilt_structures()
         return list(map(StructureType.of_top_action_typ, top_action_typs_with_unbuilt_structures))
-
-    def choose(self, agent, game_state):
-        return agent.choose_structure_typ(game_state, self.choices(game_state))
 
     def do(self, game_state, structure_typ):
         return sc.push_action(game_state, ChooseSpaceToBuildOn.new(structure_typ))

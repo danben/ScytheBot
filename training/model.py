@@ -7,7 +7,9 @@ from game import constants, game_state as gs
 from encoders import game_state as gs_enc
 from training import constants as model_const, decode, utils
 
-NUM_RESIDUAL_BLOCKS = 10
+import time
+
+NUM_RESIDUAL_BLOCKS = 5
 
 
 def resnet(board, num_residual_blocks):
@@ -82,35 +84,48 @@ def network():
     outputs[model_const.NUM_WORKERS_HEAD] = num_workers_head
     outputs[model_const.CHOOSE_ACTION_SPACE_HEAD] = choose_action_space_head
 
-    assert(all(outputs))
+    for output in outputs:
+        assert output is not None
     model = Model([board_input, data_input], outputs)
     return model
 
 
-def evaluate(model, game_state):
+def map_factions_to_values(game_state, values):
+    indices_by_faction_name = gs_enc.get_indices_by_faction_name(game_state)
+    return { f: values[i] for (f, i) in indices_by_faction_name.items() }
+
+
+# Even though [choices] is implied by [game_state], we pass it in here to avoid recomputing it
+# since we needed to compute it in the initial call to [select_move] in order to shortcut in the
+# event that there are 0 or 1 choices.
+def evaluate(model, game_state, choices):
     encoded = gs_enc.encode(game_state)
     encoded_data = encoded.encoded_data()
     preds = model.predict([[encoded.board], [encoded_data]])
-    values = preds[0][0]
-    move_priors = decode.get_move_priors(preds, game_state)
+    values = map_factions_to_values(game_state, preds[0][0])
+    move_priors = decode.get_move_priors(preds, game_state.action_stack.first.__class__, choices)
     return values, move_priors
 
 
 if __name__ == '__main__':
     import tensorflow as tf
-    from keras.backend.tensorflow_backend import set_session
 
-    config = tf.ConfigProto(
-        gpu_options=tf.GPUOptions(per_process_gpu_memory_fraction=0.8)
-        # device_count = {'GPU': 1}
-    )
-    config.gpu_options.allow_growth = True
-    session = tf.Session(config=config)
-    set_session(session)
+    # V1
+    physical_devices = tf.config.experimental.list_physical_devices('GPU')
+    tf.config.experimental.set_memory_growth(physical_devices[0], True)
+
+    # V2
+    # physical_devices = tf.config.list_physical_devices('GPU')
+    # tf.config.experimental.set_memory_growth(physical_devices[0], True)
     gs = gs.GameState.from_num_players(constants.MAX_PLAYERS)
-    encoded = gs_enc.encode(gs)
-    encoded_data = encoded.encoded_data()
     m = network()
-    preds = m.predict([[encoded.board], [encoded_data]])
-    for pred in preds:
-        print(pred)
+    m.summary()
+    from game import play
+    for i in range(5):
+        print(gs.action_stack.first)
+        encoded = gs_enc.encode(gs)
+        encoded_data = encoded.encoded_data()
+        s = time.time()
+        preds = m.predict([[encoded.board], [encoded_data]])
+        print(f'Time to predict: {time.time() - s}')
+        gs = play.apply_move(gs, gs.legal_moves()[0])

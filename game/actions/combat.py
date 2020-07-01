@@ -56,10 +56,9 @@ class GetDefenderCombatCards(Choice):
                    attacker_total_power, defender_total_power, num_combat_cards)
 
     def choices(self, game_state):
-        return sc.get_current_player(game_state).available_combat_cards()
-
-    def choose(self, agent, game_state):
-        return agent.choose_optional_combat_card(game_state, self.choices(game_state))
+        available_combat_cards = sc.get_current_player(game_state).available_combat_cards()
+        available_combat_cards.append([None])
+        return available_combat_cards
 
     def do(self, game_state, card):
         if card:
@@ -92,9 +91,6 @@ class GetDefenderWheelPower(Choice):
     def choices(self, game_state):
         defending_player = sc.get_player_by_faction_name(game_state, self.defending_faction_name)
         return list(range(min(MAX_COMBAT_POWER, defending_player.power)+1))
-
-    def choose(self, agent, game_state):
-        return agent.choose_combat_wheel_power(game_state, self.choices(game_state))
 
     def do(self, game_state, power):
         game_state = sc.remove_power(game_state, sc.get_player_by_faction_name(game_state, self.defending_faction_name),
@@ -133,10 +129,9 @@ class GetAttackerCombatCards(Choice):
                    attacker_total_power, num_combat_cards)
 
     def choices(self, game_state):
-        return sc.get_current_player(game_state).available_combat_cards()
-
-    def choose(self, agent, game_state):
-        return agent.choose_optional_combat_card(game_state, self.choices(game_state))
+        available = sc.get_current_player(game_state).available_combat_cards()
+        available.append(None)
+        return available
 
     def do(self, game_state, card):
         if card:
@@ -171,9 +166,6 @@ class GetAttackerWheelPower(Choice):
         attacking_player = sc.get_player_by_faction_name(game_state, self.attacking_faction_name)
         return list(range(min(MAX_COMBAT_POWER, attacking_player.power)+1))
 
-    def choose(self, agent, game_state):
-        return agent.choose_combat_wheel_power(game_state, self.choices(game_state))
-
     def do(self, game_state, power):
         game_state = sc.remove_power(game_state, sc.get_player_by_faction_name(game_state, self.attacking_faction_name),
                                      power)
@@ -207,10 +199,8 @@ class NordicMaybeUseCombatPower(Choice):
                    not_nordic_faction_name)
 
     def choices(self, game_state):
+        # The order MUST NOT change, or the results of the model will be misinterpreted
         return [False, True]
-
-    def choose(self, agent, game_state):
-        return agent.choose_boolean(game_state)
 
     def do(self, game_state, chosen):
         if chosen:

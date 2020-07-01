@@ -43,7 +43,10 @@ action_constants = {
     PlaceCubeInAnyBottomSpace: 39,
     BolsterIfPaid: 40,
     ProduceIfPaid: 41,
-    TradeIfPaid: 42
+    TradeIfPaid: 42,
+    MoveCubeToBottom: 43,
+    Move: 44,
+    LoadAndMovePiece: 45
 }
 
 choices_that_need_context = {Boolean, Optional, BottomAction, LoadResources, LoadWorkers, MaybePayCost,

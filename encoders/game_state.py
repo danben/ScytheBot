@@ -370,7 +370,7 @@ def encode_top_action(game_state):
     top_action_typ = type(top_action)
     actions_encoding[encode_actions.action_constants[top_action_typ]] = 1
     if top_action_typ in encode_actions.choices_that_need_context:
-        encode_context(top_action, actions_encoding, space_encoding, power_encoding)
+        encode_context(game_state, actions_encoding, space_encoding, power_encoding)
     return actions_encoding, space_encoding, power_encoding
 
 

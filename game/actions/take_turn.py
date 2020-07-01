@@ -23,9 +23,6 @@ class TakeTurn(Choice):
         else:
             return [i for i in space_indices if i != player_mat.last_action_spot_taken]
 
-    def choose(self, agent, game_state):
-        return agent.choose_action_spot(game_state, self.choices(game_state))
-
     def do(self, game_state, chosen):
         current_player = sc.get_current_player(game_state)
         action_combo = current_player.player_mat.action_spaces[chosen]

@@ -1,10 +1,12 @@
 from game import play
 from agents import Agent
 from training import model
+import encoders.game_state as gs_enc
 import game.state_change as sc
 
 import attr
 import numpy as np
+import logging
 
 
 @attr.s
@@ -25,13 +27,13 @@ class Node:
     parent = attr.ib()
     last_move = attr.ib()
     total_visit_count = attr.ib(default=1)
-    branches = attr.ib(default={})
-    children = attr.ib(default={})
+    branches = attr.ib(factory=dict)
+    children = attr.ib(factory=dict)
 
     @classmethod
     def from_state(cls, state, values, parent, last_move, priors):
         node = cls(state, values, parent, last_move)
-        for move, p in priors:
+        for move, p in priors.items():
             node.branches[move] = Branch(p)
         return node
 
@@ -62,9 +64,10 @@ class Node:
         self.branches[move].total_value += value
 
 
+@attr.s
 class MCTSZeroAgent(Agent):
     model = attr.ib()
-    num_rounds = attr.ib()
+    simulations_per_choice = attr.ib()
     c = attr.ib()
 
     def select_branch(self, node):
@@ -78,73 +81,54 @@ class MCTSZeroAgent(Agent):
 
         return max(node.moves(), key=score_branch)
 
-    def create_node(self, game_state, move=None, parent=None):
-        values, move_priors = model.evaluate(game_state, self.model)
+    # Even though [choices] is implied by [game_state], we pass it in here to avoid recomputing it
+    # since we needed to compute it in the initial call to [select_move] in order to shortcut in the
+    # event that there are 0 or 1 choices.
+    def create_node(self, game_state, choices, move=None, parent=None):
+        if game_state.is_over():
+            values = {}
+            for player in game_state.players_by_idx:
+                faction_name = player.faction_name()
+                values[faction_name] = 1 if faction_name is game_state.winner else 0
+            move_priors = {}
+        else:
+            values, move_priors = model.evaluate(self.model, game_state, choices)
         new_node = Node.from_state(game_state, values, parent, move, move_priors)
         if parent is not None:
             parent.add_child(move, new_node)
         return new_node
 
     def select_move(self, game_state):
-        root = self.create_node(game_state)
+        choices = game_state.legal_moves()
+        if not choices:
+            return None
+        if len(choices) == 1:
+            return choices[0]
 
-        for i in range(self.num_rounds):
+        old_level = logging.getLogger().level
+        logging.getLogger().setLevel(logging.ERROR)
+        root = self.create_node(game_state, choices)
+
+        for i in range(self.simulations_per_choice * len(choices)):
             node = root
             next_move = self.select_branch(node)
             while node.has_child(next_move):
                 node = node.get_child(next_move)
                 next_move = self.select_branch(node)
             new_state = play.apply_move(game_state, next_move)
-            child_node = self.create_node(new_state, parent=node)
+            legal_moves = new_state.legal_moves()
+            while not new_state.is_over() and (not legal_moves or len(legal_moves) == 1):
+                new_state = play.apply_move(new_state, None) if not legal_moves \
+                    else play.apply_move(new_state, legal_moves[0])
+                legal_moves = new_state.legal_moves()
+            child_node = self.create_node(new_state, new_state.legal_moves(), parent=node)
             move = next_move
             while node is not None:
-                value = child_node.values[sc.get_current_player(node.game_state)]
+                value = child_node.values[sc.get_current_player(node.game_state).faction_name()]
                 node.record_visit(move, value)
                 move = node.last_move
                 node = node.parent
-            return max(root.moves(), key=root.visit_count)
 
-    def choose_action(self, game_state, choices):
-        pass
-
-    def choose_action_spot(self, game_state, choices):
-        pass
-
-    def choose_boolean(self, game_state):
-        pass
-
-    def choose_board_coords(self, game_state, choices):
-        pass
-
-    def choose_piece(self, game_state, choices):
-        pass
-
-    def choose_resource_typ(self, game_state, choices):
-        pass
-
-    def choose_bottom_action_typ(self, game_state, choices):
-        pass
-
-    def choose_enlist_reward(self, game_state, choices):
-        pass
-
-    def choose_mech_typ_to_deploy(self, game_state, choices):
-        pass
-
-    def choose_structure_typ(self, game_state, choices):
-        pass
-
-    def choose_cube_space_to_upgrade(self, game_state, choices):
-        pass
-
-    def choose_optional_combat_card(self, game_state, choices):
-        pass
-
-    def choose_num_workers(self, game_state, choices):
-        pass
-
-    def choose_combat_wheel_power(self, game_state, choices):
-        pass
-
-    def choose_num_resources(self, game_state, choices):
-        pass
+        logging.getLogger().setLevel(old_level)
+        res = max(root.moves(), key=root.visit_count)
+        return res

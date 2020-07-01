@@ -18,9 +18,6 @@ class ChooseNumWorkers(Choice):
     def choices(self, game_state):
         return list(range(1, self.max_workers+1))
 
-    def choose(self, agent, game_state):
-        return agent.choose_num_workers(game_state, self.choices(game_state))
-
     def do(self, game_state, amt):
         if not amt:
             assert False
@@ -61,16 +58,10 @@ class OnOneHex(Choice):
         return cls('Produce on a single hex')
 
     def choices(self, game_state):
-        return sc.produceable_space_coords(game_state, sc.get_current_player(game_state))
-
-    def choose(self, agent, game_state):
-        coords = self.choices(game_state)
-        if coords:
-            if logging.getLogger().isEnabledFor(logging.DEBUG):
-                logging.debug(f'Choosing from {coords}')
-            return agent.choose_board_coords(game_state, coords)
-        else:
+        ret = sc.produceable_space_coords(game_state, sc.get_current_player(game_state))
+        if not ret:
             return None
+        return ret
 
     def do(self, game_state, coords):
         if coords:
