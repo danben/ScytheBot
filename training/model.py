@@ -110,28 +110,22 @@ def evaluate(model, game_state, choices):
 if __name__ == '__main__':
     import tensorflow as tf
     import keras.backend as K
-    import logging
-    logging.basicConfig(level=logging.DEBUG)
-    K.set_floatx('float16')
-    K.set_epsilon(1e-4)
+    # K.set_floatx('float16')
+    # K.set_epsilon(1e-4)
     K.set_learning_phase(0)
 
     # V1
-    physical_devices = tf.config.experimental.list_physical_devices('GPU')
-    tf.config.experimental.set_memory_growth(physical_devices[0], True)
+    # physical_devices = tf.config.experimental.list_physical_devices('GPU')
+    # tf.config.experimental.set_memory_growth(physical_devices[0], True)
     # tf.compat.v1.config.optimizer.set_experimental_options({'layout_optimizer':True})
 
     # V2
-    # physical_devices = tf.config.list_physical_devices('GPU')
-    # tf.config.experimental.set_memory_growth(physical_devices[0], True)
+    physical_devices = tf.config.list_physical_devices('GPU')
+    tf.config.experimental.set_memory_growth(physical_devices[0], True)
     gs = gs.GameState.from_num_players(constants.MAX_PLAYERS)
     m = network()
-    m.summary()
     from game import play
     for i in range(10):
-        if not gs.action_stack:
-            print(f'Winner: {gs.winner}')
-            assert False
         encoded = gs_enc.encode(gs)
         encoded_data = encoded.encoded_data()
         s = time.time()
