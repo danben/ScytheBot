@@ -50,29 +50,16 @@ def play_game(game_state, agents):
 def play_one_game(num_players):
     game_state = GameState.from_num_players(num_players)
     players = list(map(lambda x: x.faction_name(), game_state.players_by_idx))
-    K.set_floatx('float16')
-    K.set_epsilon(1e-4)
-    K.set_learning_phase(0)
-
-    # V1
-    physical_devices = tf.config.experimental.list_physical_devices('GPU')
-    tf.config.experimental.set_memory_growth(physical_devices[0], True)
-    # tf.compat.v1.config.optimizer.set_experimental_options({'layout_optimizer':True})
-
-    # V2
-    # physical_devices = tf.config.list_physical_devices('GPU')
-    # tf.config.experimental.set_memory_growth(physical_devices[0], True)
-
-    agents = [MCTSZeroAgent(model.network(), c=0.8, simulations_per_choice=50) for _ in range(num_players)]
+    agents = [MCTSZeroAgent(model.network(), c=0.8, simulations_per_choice=5)] * num_players
     # agents = [MCTSAgent(players, temperature=0.8, num_rounds=100), RandomAgent()]
     return play_game(game_state, agents)
 
 
 def play_randomly_forever(num_players):
     # agents = [RandomAgent() for _ in range(num_players)]
-    physical_devices = tf.config.list_physical_devices('GPU')
-    tf.config.experimental.set_memory_growth(physical_devices[0], True)
-    agents = [MCTSZeroAgent(model.network(), c=0.8, simulations_per_choice=50) for _ in range(num_players)]
+    # physical_devices = tf.config.list_physical_devices('GPU')
+    # tf.config.experimental.set_memory_growth(physical_devices[0], True)
+    agents = [MCTSZeroAgent(model.network(), c=0.8, simulations_per_choice=10)] * num_players
     while True:
         game_state = GameState.from_num_players(num_players)
         play_game(game_state, agents)
@@ -80,7 +67,24 @@ def play_randomly_forever(num_players):
 
 if __name__ == '__main__':
     num_players = 2
+    # K.set_floatx('float16')
+    # K.set_epsilon(1e-4)
+    K.set_learning_phase(0)
+
+    # V1
+    # physical_devices = tf.config.experimental.list_physical_devices('GPU')
+    # tf.config.experimental.set_memory_growth(physical_devices[0], True)
+    # tf.compat.v1.config.optimizer.set_experimental_options({'layout_optimizer':True})
+
+    # V2
+    physical_devices = tf.config.list_physical_devices('GPU')
+    tf.config.experimental.set_memory_growth(physical_devices[0], True)
+
     # play_one_game(num_players)
+    # tf.config.set_visible_devices([], 'GPU')
+    # tf.debugging.set_log_device_placement(True)
+    # import os
+    # os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
     cProfile.run('play_one_game(num_players)', sort='cumtime')
     # play_randomly_forever(num_players)
     # mcts_wins = 0

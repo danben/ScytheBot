@@ -5,11 +5,33 @@ from keras.regularizers import l2
 
 from game import constants, game_state as gs
 from encoders import game_state as gs_enc
-from training import constants as model_const, decode, utils
+from training import decode, utils
+from training.constants import Head
 
+import numpy as np
 import time
 
 NUM_RESIDUAL_BLOCKS = 5
+
+head_sizes = {
+    Head.VALUE_HEAD: constants.MAX_PLAYERS,
+    Head.OPTIONAL_HEAD: 2,
+    Head.BOOLEAN_HEAD: 2,
+    Head.MAYBE_PAY_COST_HEAD: 2,
+    Head.BOARD_COORDS_HEAD: constants.BOARD_ROWS * constants.BOARD_COLS + constants.NUM_FACTIONS,
+    Head.PIECE_TYP_HEAD: 3,  # Structures are not represented, so we don't use len(PieceType)
+    Head.RESOURCE_TYP_HEAD: constants.NUM_RESOURCE_TYPES,
+    Head.BOTTOM_ACTION_TYP_HEAD: constants.NUM_PLAYER_MAT_ACTION_SPACES,
+    Head.ENLIST_REWARD_HEAD: constants.NUM_ENLIST_BENEFITS,
+    Head.MECH_TYP_HEAD: constants.NUM_MECHS,
+    Head.STRUCTURE_TYP_HEAD: constants.NUM_STRUCTURES,
+    Head.CUBE_SPACE_HEAD: constants.NUM_UPGRADE_CUBES,
+    Head.OPTIONAL_COMBAT_CARD_HEAD: constants.NUM_COMBAT_CARD_VALUES + 1,
+    Head.WHEEL_POWER_HEAD: constants.MAX_COMBAT_POWER + 1,
+    Head.NUM_WORKERS_HEAD: constants.NUM_WORKERS,
+    Head.NUM_RESOURCES_HEAD: gs_enc.BOARD_ENCODING__THEORETICAL_MAX_RESOURCES_PER_SPACE,
+    Head.CHOOSE_ACTION_SPACE_HEAD: constants.NUM_PLAYER_MAT_ACTION_SPACES
+}
 
 
 def resnet(board, num_residual_blocks):
@@ -19,11 +41,11 @@ def resnet(board, num_residual_blocks):
     return base
 
 
-def head(X, num_choices):
-    X = utils.hidden_layer(128)(X)
-    X = utils.hidden_layer(64)(X)
-    X = Dense(num_choices, activation='softmax', kernel_regularizer=l2(utils.REGULARIZATION_FACTOR))(X)
-    return X
+def head(x, num_choices):
+    # x = utils.hidden_layer(128)(x)
+    # x = utils.hidden_layer(64)(x)
+    x = Dense(num_choices, activation='softmax', kernel_regularizer=l2(utils.REGULARIZATION_FACTOR))(x)
+    return x
 
 
 def network():
@@ -47,42 +69,26 @@ def network():
 
     concat = Concatenate()([board, data])
 
-    value_head = Dense(constants.MAX_PLAYERS, activation="softmax", kernel_regularizer=l2(utils.REGULARIZATION_FACTOR))(concat)
-    optional_head = head(concat, 2)
-    boolean_head = head(concat, 2)
-    maybe_pay_cost_head = head(concat, 2)
-    board_coords_head = head(concat, constants.BOARD_ROWS * constants.BOARD_COLS + constants.NUM_FACTIONS)
-    piece_typ_head = head(concat, 3) # This will combine with [board_coords_head] to choose a piece
-    resource_typ_head = head(concat, constants.NUM_RESOURCE_TYPES)
-    bottom_action_typ_head = head(concat, constants.NUM_PLAYER_MAT_ACTION_SPACES)
-    enlist_reward_head = head(concat, constants.NUM_ENLIST_BENEFITS)
-    mech_typ_head = head(concat, constants.NUM_MECHS)
-    structure_typ_head = head(concat, constants.NUM_STRUCTURES)
-    cube_space_head = head(concat, constants.NUM_UPGRADE_CUBES)
-    optional_combat_card_head = head(concat, constants.NUM_COMBAT_CARD_VALUES + 1)
-    wheel_power_head = head(concat, constants.MAX_COMBAT_POWER + 1)
-    num_workers_head = head(concat, constants.NUM_WORKERS)
-    num_resources_head = head(concat, gs_enc.BOARD_ENCODING__THEORETICAL_MAX_RESOURCES_PER_SPACE)
-    choose_action_space_head = head(concat, constants.NUM_PLAYER_MAT_ACTION_SPACES)
-
-    outputs = [None] * model_const.NUM_HEADS
-    outputs[model_const.VALUE_HEAD] = value_head
-    outputs[model_const.OPTIONAL_HEAD] = optional_head
-    outputs[model_const.BOOLEAN_HEAD] = boolean_head
-    outputs[model_const.MAYBE_PAY_COST_HEAD] = maybe_pay_cost_head
-    outputs[model_const.BOARD_COORDS_HEAD] = board_coords_head
-    outputs[model_const.PIECE_TYP_HEAD] = piece_typ_head
-    outputs[model_const.RESOURCE_TYP_HEAD] = resource_typ_head
-    outputs[model_const.BOTTOM_ACTION_TYP_HEAD] = bottom_action_typ_head
-    outputs[model_const.ENLIST_REWARD_HEAD] = enlist_reward_head
-    outputs[model_const.MECH_TYP_HEAD] = mech_typ_head
-    outputs[model_const.STRUCTURE_TYP_HEAD] = structure_typ_head
-    outputs[model_const.CUBE_SPACE_HEAD] = cube_space_head
-    outputs[model_const.OPTIONAL_COMBAT_CARD_HEAD] = optional_combat_card_head
-    outputs[model_const.WHEEL_POWER_HEAD] = wheel_power_head
-    outputs[model_const.NUM_RESOURCES_HEAD] = num_resources_head
-    outputs[model_const.NUM_WORKERS_HEAD] = num_workers_head
-    outputs[model_const.CHOOSE_ACTION_SPACE_HEAD] = choose_action_space_head
+    outputs = [None] * len(Head)
+    outputs[Head.VALUE_HEAD.value] = Dense(head_sizes[Head.VALUE_HEAD], activation="softmax",
+                                            kernel_regularizer=l2(utils.REGULARIZATION_FACTOR))(concat)
+    outputs[Head.OPTIONAL_HEAD.value] = head(concat, head_sizes[Head.OPTIONAL_HEAD])
+    outputs[Head.BOOLEAN_HEAD.value] = head(concat, head_sizes[Head.BOOLEAN_HEAD])
+    outputs[Head.MAYBE_PAY_COST_HEAD.value] = head(concat, head_sizes[Head.MAYBE_PAY_COST_HEAD])
+    outputs[Head.BOARD_COORDS_HEAD.value] = head(concat, head_sizes[Head.BOARD_COORDS_HEAD])
+    # This will combine with [board_coords_head] to choose a piece
+    outputs[Head.PIECE_TYP_HEAD.value] = head(concat, head_sizes[Head.PIECE_TYP_HEAD])
+    outputs[Head.RESOURCE_TYP_HEAD.value] = head(concat, head_sizes[Head.RESOURCE_TYP_HEAD])
+    outputs[Head.BOTTOM_ACTION_TYP_HEAD.value] = head(concat, head_sizes[Head.BOTTOM_ACTION_TYP_HEAD])
+    outputs[Head.ENLIST_REWARD_HEAD.value] = head(concat, head_sizes[Head.ENLIST_REWARD_HEAD])
+    outputs[Head.MECH_TYP_HEAD.value] = head(concat, head_sizes[Head.MECH_TYP_HEAD])
+    outputs[Head.STRUCTURE_TYP_HEAD.value] = head(concat, head_sizes[Head.STRUCTURE_TYP_HEAD])
+    outputs[Head.CUBE_SPACE_HEAD.value] = head(concat, head_sizes[Head.CUBE_SPACE_HEAD])
+    outputs[Head.OPTIONAL_COMBAT_CARD_HEAD.value] = head(concat, head_sizes[Head.OPTIONAL_COMBAT_CARD_HEAD])
+    outputs[Head.WHEEL_POWER_HEAD.value] = head(concat, head_sizes[Head.WHEEL_POWER_HEAD])
+    outputs[Head.NUM_WORKERS_HEAD.value] = head(concat, head_sizes[Head.NUM_WORKERS_HEAD])
+    outputs[Head.NUM_RESOURCES_HEAD.value] = head(concat, head_sizes[Head.NUM_RESOURCES_HEAD])
+    outputs[Head.CHOOSE_ACTION_SPACE_HEAD.value] = head(concat, head_sizes[Head.CHOOSE_ACTION_SPACE_HEAD])
 
     for output in outputs:
         assert output is not None
@@ -92,24 +98,36 @@ def network():
 
 def map_factions_to_values(game_state, values):
     indices_by_faction_name = gs_enc.get_indices_by_faction_name(game_state)
-    return { f: values[i] for (f, i) in indices_by_faction_name.items() }
+    return {f: values[i] for (f, i) in indices_by_faction_name.items()}
 
 
 # Even though [choices] is implied by [game_state], we pass it in here to avoid recomputing it
 # since we needed to compute it in the initial call to [select_move] in order to shortcut in the
 # event that there are 0 or 1 choices.
-def evaluate(model, game_state, choices):
-    encoded = gs_enc.encode(game_state)
-    encoded_data = encoded.encoded_data()
-    preds = model.predict([[encoded.board], [encoded_data]])
-    values = map_factions_to_values(game_state, preds[0][0])
-    move_priors = decode.get_move_priors(preds, game_state.action_stack.first.__class__, choices)
+def evaluate(model, game_states, choices):
+    encoded = [gs_enc.encode(game_state) for game_state in game_states]
+    encoded_data = np.array([e.encoded_data() for e in encoded])
+    boards = np.array([e.board for e in encoded])
+    inverted_preds = model.predict([boards, encoded_data], batch_size=len(game_states), use_multiprocessing=True)
+    preds = []
+    for i in range(len(game_states)):
+        preds.append([inverted_preds[head][i] for head in range(len(Head))])
+    values = [map_factions_to_values(game_states[i], preds[i][Head.VALUE_HEAD.value]) for i in range(len(game_states))]
+    move_priors = [decode.get_move_priors(preds[i], game_states[i].action_stack.first.__class__, choices[i])
+                   for i in range(len(game_states))]
     return values, move_priors
+
+
+def empty_heads(len):
+    return [np.zeros((len, head_sizes[h])) for h in Head]
 
 
 if __name__ == '__main__':
     import tensorflow as tf
     import keras.backend as K
+    # tf.config.set_visible_devices([], 'GPU')
+    # tf.debugging.set_log_device_placement(True)
+    import os
     # K.set_floatx('float16')
     # K.set_epsilon(1e-4)
     K.set_learning_phase(0)
@@ -120,8 +138,8 @@ if __name__ == '__main__':
     # tf.compat.v1.config.optimizer.set_experimental_options({'layout_optimizer':True})
 
     # V2
-    physical_devices = tf.config.list_physical_devices('GPU')
-    tf.config.experimental.set_memory_growth(physical_devices[0], True)
+    #physical_devices = tf.config.list_physical_devices('GPU')
+    #tf.config.experimental.set_memory_growth(physical_devices[0], True)
     gs = gs.GameState.from_num_players(constants.MAX_PLAYERS)
     m = network()
     from game import play

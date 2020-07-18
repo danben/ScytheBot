@@ -1,7 +1,7 @@
 import game.constants as const
 import encoders.game_state as gs_enc
-import training.constants as c
 import training.decode as decode
+from training.constants import Head
 
 from game.actions import *
 from game.types import Benefit, BottomActionType, MechType, PieceType, ResourceType, StructureType
@@ -31,53 +31,51 @@ def make_board_coords_preds():
     ret = np.zeros(const.BOARD_ROWS * const.BOARD_COLS + const.NUM_FACTIONS)
     for row in range(const.BOARD_ROWS):
         for col in range(const.BOARD_COLS):
-            ret[row * const.BOARD_COLS + col] = c.BOARD_COORDS_HEAD * 100 + row * 10 + col
+            ret[row * const.BOARD_COLS + col] = Head.BOARD_COORDS_HEAD.value * 100 + row * 10 + col
     for i in range(const.NUM_FACTIONS):
-        ret[const.BOARD_ROWS * const.BOARD_COLS + i] = c.BOARD_COORDS_HEAD * 100 + const.BOARD_ROWS * 10 + i
+        ret[const.BOARD_ROWS * const.BOARD_COLS + i] = Head.BOARD_COORDS_HEAD.value * 100 + const.BOARD_ROWS * 10 + i
     return ret
 
-# Meaningless numbers to make sure we aren't using the values in any way when we decode probabilities
-FAKE_ACTION_4 = 7
-FAKE_ACTION_6 = 9
 
-value_head = np.array([c.VALUE_HEAD * 100 + i * 10 for i in range(const.MAX_PLAYERS)])
-optional_head = of_boolean(c.OPTIONAL_HEAD)
-boolean_head = np.array([c.BOOLEAN_HEAD * 100 + 4, c.BOOLEAN_HEAD  * 100 + 6])
-maybe_pay_cost_head = of_boolean(c.MAYBE_PAY_COST_HEAD)
+value_head = np.array([Head.VALUE_HEAD.value * 100 + i * 10 for i in range(const.MAX_PLAYERS)])
+optional_head = of_boolean(Head.OPTIONAL_HEAD.value)
+boolean_head = np.array([Head.BOOLEAN_HEAD.value * 100 + 4, Head.BOOLEAN_HEAD.value * 100 + 6])
+maybe_pay_cost_head = of_boolean(Head.MAYBE_PAY_COST_HEAD.value)
 board_coords_head = make_board_coords_preds()
-piece_typ_head = of_enum(c.PIECE_TYP_HEAD, PieceType)
-resource_typ_head = of_enum(c.RESOURCE_TYP_HEAD, ResourceType)
-bottom_action_typ_head = of_enum(c.BOTTOM_ACTION_TYP_HEAD, BottomActionType)
-enlist_reward_head = of_enum(c.ENLIST_REWARD_HEAD, Benefit)
-mech_typ_head = of_enum(c.MECH_TYP_HEAD, MechType)
-structure_typ_head = of_enum(c.STRUCTURE_TYP_HEAD, StructureType)
-cube_space_head = of_range(c.CUBE_SPACE_HEAD, const.NUM_UPGRADE_CUBES - 1)
-optional_combat_card_head = of_range(c.OPTIONAL_COMBAT_CARD_HEAD, const.MIN_COMBAT_CARD, const.MAX_COMBAT_CARD+1)
-wheel_power_head = of_range(c.WHEEL_POWER_HEAD, const.MAX_COMBAT_POWER)
-num_workers_head = of_range(c.NUM_WORKERS_HEAD, const.NUM_WORKERS)
-num_resources_head = of_range(c.NUM_RESOURCES_HEAD, gs_enc.BOARD_ENCODING__THEORETICAL_MAX_RESOURCES_PER_SPACE)
-choose_action_space_head = of_range(c.CHOOSE_ACTION_SPACE_HEAD, const.NUM_PLAYER_MAT_ACTION_SPACES - 1)
+piece_typ_head = of_enum(Head.PIECE_TYP_HEAD.value, PieceType)
+resource_typ_head = of_enum(Head.RESOURCE_TYP_HEAD.value, ResourceType)
+bottom_action_typ_head = of_enum(Head.BOTTOM_ACTION_TYP_HEAD.value, BottomActionType)
+enlist_reward_head = of_enum(Head.ENLIST_REWARD_HEAD.value, Benefit)
+mech_typ_head = of_enum(Head.MECH_TYP_HEAD.value, MechType)
+structure_typ_head = of_enum(Head.STRUCTURE_TYP_HEAD.value, StructureType)
+cube_space_head = of_range(Head.CUBE_SPACE_HEAD.value, const.NUM_UPGRADE_CUBES - 1)
+optional_combat_card_head = of_range(Head.OPTIONAL_COMBAT_CARD_HEAD.value, const.MIN_COMBAT_CARD,
+                                     const.MAX_COMBAT_CARD + 1)
+wheel_power_head = of_range(Head.WHEEL_POWER_HEAD.value, const.MAX_COMBAT_POWER)
+num_workers_head = of_range(Head.NUM_WORKERS_HEAD.value, const.NUM_WORKERS)
+num_resources_head = of_range(Head.NUM_RESOURCES_HEAD.value, gs_enc.BOARD_ENCODING__THEORETICAL_MAX_RESOURCES_PER_SPACE)
+choose_action_space_head = of_range(Head.CHOOSE_ACTION_SPACE_HEAD.value, const.NUM_PLAYER_MAT_ACTION_SPACES - 1)
 
 
 def create_test_preds():
-    preds = [None] * c.NUM_HEADS
-    preds[c.VALUE_HEAD] = value_head
-    preds[c.OPTIONAL_HEAD] = optional_head
-    preds[c.BOOLEAN_HEAD] = boolean_head
-    preds[c.MAYBE_PAY_COST_HEAD] = maybe_pay_cost_head
-    preds[c.BOARD_COORDS_HEAD] = board_coords_head
-    preds[c.PIECE_TYP_HEAD] = piece_typ_head
-    preds[c.RESOURCE_TYP_HEAD] = resource_typ_head
-    preds[c.BOTTOM_ACTION_TYP_HEAD] = bottom_action_typ_head
-    preds[c.ENLIST_REWARD_HEAD] = enlist_reward_head
-    preds[c.MECH_TYP_HEAD] = mech_typ_head
-    preds[c.STRUCTURE_TYP_HEAD] = structure_typ_head
-    preds[c.CUBE_SPACE_HEAD] = cube_space_head
-    preds[c.OPTIONAL_COMBAT_CARD_HEAD] = optional_combat_card_head
-    preds[c.WHEEL_POWER_HEAD] = wheel_power_head
-    preds[c.NUM_WORKERS_HEAD] = num_workers_head
-    preds[c.NUM_RESOURCES_HEAD] = num_resources_head
-    preds[c.CHOOSE_ACTION_SPACE_HEAD] = choose_action_space_head
+    preds = [None] * len(Head)
+    preds[Head.VALUE_HEAD.value] = value_head
+    preds[Head.OPTIONAL_HEAD.value] = optional_head
+    preds[Head.BOOLEAN_HEAD.value] = boolean_head
+    preds[Head.MAYBE_PAY_COST_HEAD.value] = maybe_pay_cost_head
+    preds[Head.BOARD_COORDS_HEAD.value] = board_coords_head
+    preds[Head.PIECE_TYP_HEAD.value] = piece_typ_head
+    preds[Head.RESOURCE_TYP_HEAD.value] = resource_typ_head
+    preds[Head.BOTTOM_ACTION_TYP_HEAD.value] = bottom_action_typ_head
+    preds[Head.ENLIST_REWARD_HEAD.value] = enlist_reward_head
+    preds[Head.MECH_TYP_HEAD.value] = mech_typ_head
+    preds[Head.STRUCTURE_TYP_HEAD.value] = structure_typ_head
+    preds[Head.CUBE_SPACE_HEAD.value] = cube_space_head
+    preds[Head.OPTIONAL_COMBAT_CARD_HEAD.value] = optional_combat_card_head
+    preds[Head.WHEEL_POWER_HEAD.value] = wheel_power_head
+    preds[Head.NUM_WORKERS_HEAD.value] = num_workers_head
+    preds[Head.NUM_RESOURCES_HEAD.value] = num_resources_head
+    preds[Head.CHOOSE_ACTION_SPACE_HEAD.value] = choose_action_space_head
     for x in preds:
         assert x is not None
     return preds
@@ -111,12 +109,10 @@ def cube_space_value(c):
     return (gs_enc.EncodedPlayerMat.TOP_ACTION_CUBES_OFFSETS_BY_TOP_ACTION_TYPE[top_action_typ] + pos) * 10
 
 
-def choose_between_two_actions_value(action):
-    if action == FAKE_ACTION_4:
-        return 4
-    if action == FAKE_ACTION_6:
+def choose_between_two_actions_value(b):
+    if b:
         return 6
-    assert False
+    return 4
 
 
 to_expected_value = {
@@ -125,7 +121,7 @@ to_expected_value = {
     MaybePayCost: identity_value,
     SpendAResource: board_coords_value,
     # TODO: Add this when Crimea joins
-    # CrimeaMaybeChooseResource: c.RESOURCE_TYP_HEAD,
+    # CrimeaMaybeChooseResource: Head.RESOURCE_TYP_HEAD,
     BottomAction: identity_value,
     Bolster: identity_value,
     ChooseSpaceToBuildOn: board_coords_value,
@@ -159,13 +155,9 @@ def false_and_true():
     return [False, True]
 
 
-def both_fake_actions_in_order():
-    return [FAKE_ACTION_4, FAKE_ACTION_6]
-
-
 def all_board_coords():
     return [(row, col) for row in range(const.BOARD_ROWS) for col in range(const.BOARD_COLS)] \
-        + [(-1, f) for f in range(const.NUM_FACTIONS)]
+           + [(-1, f) for f in range(const.NUM_FACTIONS)]
 
 
 def all_board_coords_and_piece_type_combinations():
@@ -179,7 +171,7 @@ def all_from_enum(cls):
 def from_range(x, y=None):
     if not y:
         return lambda: [v for v in range(x)]
-    return lambda: [v for v in range(x, y+1)]
+    return lambda: [v for v in range(x, y + 1)]
 
 
 def all_cube_spaces():
@@ -195,11 +187,11 @@ def all_cube_spaces():
 
 make_choices = {
     Optional: false_and_true,
-    Boolean: both_fake_actions_in_order,
+    Boolean: false_and_true,
     MaybePayCost: false_and_true,
     SpendAResource: all_board_coords,
     # TODO: Add this when Crimea joins
-    # CrimeaMaybeChooseResource: c.RESOURCE_TYP_HEAD,
+    # CrimeaMaybeChooseResource: Head.RESOURCE_TYP_HEAD,
     BottomAction: false_and_true,
     Bolster: false_and_true,
     ChooseSpaceToBuildOn: all_board_coords,
@@ -231,21 +223,21 @@ make_choices = {
 
 def test_decoding(preds, top_action_class, choices):
     if top_action_class is MoveOnePiece:
-        priors = decode.get_board_coords_and_piece_typ_priors(choices, preds[c.BOARD_COORDS_HEAD],
-                                                              preds[c.PIECE_TYP_HEAD])
+        priors = decode.get_board_coords_and_piece_typ_priors(choices, preds[Head.BOARD_COORDS_HEAD.value],
+                                                              preds[Head.PIECE_TYP_HEAD.value])
         for (board_coords, piece_typ) in choices:
             actual = priors[(board_coords, piece_typ)]
-            expected = (c.BOARD_COORDS_HEAD * 100 + board_coords_value(board_coords)) \
-                       * (c.PIECE_TYP_HEAD * 100 + enum_value(piece_typ))
+            expected = (Head.BOARD_COORDS_HEAD.value * 100 + board_coords_value(board_coords)) \
+                       * (Head.PIECE_TYP_HEAD.value * 100 + enum_value(piece_typ))
             assert expected == actual
     else:
-        priors = decode._decoders[top_action_class](choices,
-                                                    preds[decode._model_head_by_action_class[top_action_class]])
+        head = decode.model_head_by_action_class[top_action_class].value
+        priors = {choice: preds[head][decode.decoders[top_action_class](choice)] for choice in choices}
 
         for choice in choices:
             actual = priors[choice]
-            expected = decode._model_head_by_action_class[top_action_class] * 100 + to_expected_value[top_action_class](choice)
-            # print(f'Expected: {expected}, actual: {actual}')
+            expected = decode.model_head_by_action_class[top_action_class].value * 100 \
+                       + to_expected_value[top_action_class](choice)
             assert expected == actual
 
 
@@ -283,7 +275,6 @@ all_choice_action_classes = [
     RemoveCubeFromAnyTopSpace,
     PlaceCubeInAnyBottomSpace
 ]
-
 
 if __name__ == '__main__':
     preds = create_test_preds()

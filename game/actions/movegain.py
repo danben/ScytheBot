@@ -17,7 +17,8 @@ class LoadResources(Choice):
 
     def choices(self, game_state):
         piece = game_state.pieces_by_key[self.piece_key]
-        amt = game_state.board.get_space(piece.board_coords).amount_of(self.resource_typ)
+        # TODO: replace magic constant
+        amt = min(game_state.board.get_space(piece.board_coords).amount_of(self.resource_typ), 20)
         return list(range(amt+1))
 
     def do(self, game_state, amt):

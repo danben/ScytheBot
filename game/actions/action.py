@@ -59,11 +59,12 @@ class Boolean(Choice):
         return cls(f'Choosing between {action1.name} and {action2.name}', action1, action2)
 
     def do(self, game_state, chosen):
-        return sc.push_action(game_state, chosen)
+        action = self.action2 if chosen else self.action1
+        return sc.push_action(game_state, action)
 
     def choices(self, game_state):
         # The order MUST NOT change, or the results of the model will be misinterpreted
-        return [self.action1, self.action2]
+        return [False, True]
 
 
 @attr.s(frozen=True, slots=True)
