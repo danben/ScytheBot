@@ -7,8 +7,8 @@ import tensorflow as tf
 from training.learner import Learner
 
 NUM_PLAYERS = 2
-NUM_WORKERS = 2
-SIMULATIONS_PER_CHOICE = 3
+NUM_WORKERS = 1
+SIMULATIONS_PER_CHOICE = 10
 
 
 def run_n_times(n, game_state, agents):
@@ -17,20 +17,22 @@ def run_n_times(n, game_state, agents):
         play.play_game(game_state, agents)
 
 
-def worker(wid, evaluator_conn, learner_queue):
+def worker(wid, evaluator_conn, learner_queue, stop_after=None):
     from agents.mcts_zero import MCTSZeroAgent
     from game.game_state import GameState
     from play import play
     import time
+    print(f'Worker {wid} starting')
     if logging.getLogger().isEnabledFor(logging.DEBUG):
         logging.debug(f'Worker {wid} starting')
     game_state = GameState.from_num_players(NUM_PLAYERS)
     agents = [MCTSZeroAgent(c=0.8, simulations_per_choice=SIMULATIONS_PER_CHOICE, evaluator_conn=evaluator_conn)
               for _ in range(NUM_PLAYERS)]
-    # cProfile.runctx('run_n_times(5, game_state, agents)', globals(), locals(), sort='cumtime')
-    # time.sleep(10000)
+    cProfile.runctx('run_n_times(1, game_state, agents)', globals(), locals(), sort='cumtime')
+    time.sleep(10000)
 
-    while True:
+    num_games = 0
+    while stop_after is None or num_games >= stop_after:
         for agent in agents:
             agent.begin_episode()
         if logging.getLogger().isEnabledFor(logging.DEBUG):
@@ -49,6 +51,7 @@ def worker(wid, evaluator_conn, learner_queue):
                               f'samples to learner queue')
             print(f'Worker {wid} adding {len(agent.experience_collector.game_states)} samples to learner queue')
             learner_queue.put(agent.experience_collector.to_numpy())
+        num_games += 1
 
 
 def evaluator(conns):

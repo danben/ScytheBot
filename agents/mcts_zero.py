@@ -11,6 +11,9 @@ import logging
 
 from collections import  defaultdict
 
+logger = logging.getLogger('mcts_zero_debug_logger')
+logger.setLevel(logging.ERROR)
+
 
 @attr.s(slots=True)
 class ExperienceCollector:
@@ -31,15 +34,7 @@ class ExperienceCollector:
     @staticmethod
     def _assign_move_probs_aux(values_and_move_probs, row, output_head, decoder, move_visits):
         for move in move_visits.keys():
-            try:
-                move_prob = move_visits[move] / sum(move_visits.values())
-            except:
-                print(f'Type of move probs: {type(move_visits)}')
-                print(f'Output head: {output_head}')
-                print(f'len(self.move_probs[i]): {len(move_visits)}')
-                print(f'Move: {move}')
-                print(f'Decoded: {decoder(move)}')
-                assert False
+            move_prob = move_visits[move] / sum(move_visits.values())
             head = values_and_move_probs[output_head]
             head[row, decoder(move)] = move_prob
 
@@ -51,8 +46,6 @@ class ExperienceCollector:
 
     @staticmethod
     def _assign_move_probs__move_one_piece(values_and_move_probs, row, move_visits):
-        board_coords_head = values_and_move_probs[model_const.Head.BOARD_COORDS_HEAD.value]
-        piece_type_head = values_and_move_probs[model_const.Head.PIECE_TYP_HEAD.value]
         board_coord_visits = defaultdict(int)
         piece_type_visits = defaultdict(int)
         for move, visits in move_visits.items():
@@ -114,7 +107,7 @@ class Node:
         return node
 
     def moves(self):
-        return self.branches.keys()
+        return list(self.branches.keys())
 
     def add_child(self, move, child_node):
         self.children[move] = child_node
@@ -139,12 +132,21 @@ class Node:
         self.branches[move].visit_count += 1
         self.branches[move].total_value += value
 
+    def propagate_values(self, values, last_move):
+        node = self
+        while node is not None:
+            value_for_current_node = values[sc.get_current_player(node.game_state).faction_name()]
+            node.record_visit(last_move, value_for_current_node)
+            last_move = node.last_move
+            node = node.parent
+
 
 @attr.s(slots=True)
 class MCTSZeroAgent(Agent):
     simulations_per_choice = attr.ib()
     c = attr.ib()
-    evaluator_conn = attr.ib()
+    evaluator_conn = attr.ib(default=None)
+    evaluator_network = attr.ib(default=None)
     experience_collector = attr.ib(default=None)
 
     def begin_episode(self):
@@ -160,7 +162,11 @@ class MCTSZeroAgent(Agent):
             q = node.expected_value(move)
             p = node.prior(move)
             n = node.visit_count(move)
-            return q + self.c * p * np.sqrt(total_n) / (n + 1)
+            score = q + self.c * p * np.sqrt(total_n) / (n + 1)
+            if logger.isEnabledFor((logging.DEBUG)):
+                logger.debug(f'Evaluating move {move}')
+                logger.debug(f'EV: {q}; P: {p}; VC: {n}; Score: {score}')
+            return score
 
         return max(node.moves(), key=score_branch)
 
@@ -175,9 +181,11 @@ class MCTSZeroAgent(Agent):
                 values[faction_name] = 1 if faction_name is game_state.winner else 0
             move_priors = {}
         else:
-            assert isinstance(choices, list)
-            self.evaluator_conn.send((game_state, choices))
-            values, move_priors = self.evaluator_conn.recv()
+            if self.evaluator_conn is not None:
+                self.evaluator_conn.send((game_state, choices))
+                values, move_priors = self.evaluator_conn.recv()
+            else:
+                values, move_priors = model.evaluate(self.evaluator_network, [game_state], [choices])
         new_node = Node.from_state(game_state, values, parent, move, move_priors)
         if parent is not None:
             parent.add_child(move, new_node)
@@ -199,39 +207,49 @@ class MCTSZeroAgent(Agent):
         root = self.create_node(game_state, choices)
 
         for i in range(self.simulations_per_choice * len(choices)):
+            logger.debug('STARTING AT THE ROOT')
             node = root
-            next_move = self.select_branch(node)
-            while node.has_child(next_move):
-                node = node.get_child(next_move)
-                next_move = self.select_branch(node)
-            new_state = play.apply_move(game_state, next_move)
-            legal_moves = new_state.legal_moves()
-            while not new_state.is_over() and (not legal_moves or len(legal_moves) == 1):
-                new_state = play.apply_move(new_state, None) if not legal_moves \
-                    else play.apply_move(new_state, legal_moves[0])
+            while node.moves():
+                if logger.isEnabledFor(logging.DEBUG):
+                    logger.debug(f'Selecting a branch for {node.game_state.action_stack.first.__class__}')
+                move = self.select_branch(node)
+                if node.has_child(move):
+                    node = node.children[move]
+                else:
+                    break
+
+            if node.game_state.is_over():
+                values_to_propagate = {faction_name: 1 if faction_name is game_state.winner else 0
+                                       for faction_name in game_state.player_idx_by_faction_name.keys()}
+            else:
+                new_state = play.apply_move(node.game_state, move)
                 legal_moves = new_state.legal_moves()
-            child_node = self.create_node(new_state, legal_moves, parent=node)
-            move = next_move
-            while node is not None:
-                value = child_node.values[sc.get_current_player(node.game_state).faction_name()]
-                node.record_visit(move, value)
-                move = node.last_move
+                while not new_state.is_over() and (not legal_moves or len(legal_moves) == 1):
+                    new_state = play.apply_move(new_state, None) if not legal_moves \
+                        else play.apply_move(new_state, legal_moves[0])
+                    legal_moves = new_state.legal_moves()
+                node = self.create_node(new_state, legal_moves, move, parent=node)
+                values_to_propagate = node.values
+
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug(f'Propagating values {values_to_propagate}')
+            while node.parent is not None:
+                faction_name = sc.get_current_player(node.parent.game_state).faction_name()
+                value = values_to_propagate[faction_name]
+                if logger.isEnabledFor(logging.DEBUG):
+                    logger.debug(f'Recording a value of {value} for player {faction_name}')
+                node.parent.record_visit(move, value)
+                move = node.parent.last_move
                 node = node.parent
 
         logging.getLogger().setLevel(old_level)
-        move_visits = {}
-        res = None
-        max_visit_count = 0
         legal_moves = root.moves()
-        for move in legal_moves:
-            visit_count = root.visit_count(move)
-            move_visits[move] = visit_count
-            if visit_count > max_visit_count:
-                max_visit_count = visit_count
-                res = move
+        move_visits = [root.visit_count(move) for move in legal_moves]
         assert len(legal_moves) == len(move_visits)
-        for move in legal_moves:
-            assert move in move_visits
         self.experience_collector.record_move(game_state, legal_moves, move_visits)
-        assert max_visit_count > 0
-        return res
+        total_moves = sum(move_visits)
+        probas = [mv / total_moves for mv in move_visits]
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug(f'Probability distribution for {legal_moves}: {probas}')
+        # Have to do this annoying thing because [legal_moves] might contain tuples
+        return legal_moves[np.random.choice(range(len(legal_moves)), p=probas)]

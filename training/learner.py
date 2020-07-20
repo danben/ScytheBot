@@ -65,8 +65,7 @@ class Learner:
                     ys[i].append(h)
             boards_np = np.vstack(boards)
             data_np = np.vstack(data)
-            y = [np.vstack(h) for h in y]
+            y = [np.vstack(h) for h in ys]
             print(f'Learner training on {len(boards_np)} samples')
             logging.debug(f'Training on {len(boards_np)} samples')
-            print(f'Shapes: {boards_np.shape, data_np.shape, [h.shape for h in y]}')
-            self.model.fit([boards_np, data_np], y, epochs=1, verbose=0)
+            self.model.fit([boards_np, data_np], y, epochs=1, verbose=1)

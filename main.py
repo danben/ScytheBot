@@ -50,7 +50,8 @@ def play_game(game_state, agents):
 def play_one_game(num_players):
     game_state = GameState.from_num_players(num_players)
     players = list(map(lambda x: x.faction_name(), game_state.players_by_idx))
-    agents = [MCTSZeroAgent(model.network(), c=0.8, simulations_per_choice=5)] * num_players
+    nn = model.network()
+    agents = [MCTSZeroAgent(simulations_per_choice=5, c=0.8, evaluator_network=nn) for _ in range(num_players)]
     # agents = [MCTSAgent(players, temperature=0.8, num_rounds=100), RandomAgent()]
     return play_game(game_state, agents)
 
@@ -85,7 +86,8 @@ if __name__ == '__main__':
     # tf.debugging.set_log_device_placement(True)
     # import os
     # os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
-    cProfile.run('play_one_game(num_players)', sort='cumtime')
+    play_one_game(num_players)
+    # cProfile.run('play_one_game(num_players)', sort='cumtime')
     # play_randomly_forever(num_players)
     # mcts_wins = 0
     # for i in range(100):
