@@ -86,8 +86,8 @@ if __name__ == '__main__':
     # tf.debugging.set_log_device_placement(True)
     # import os
     # os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
-    play_one_game(num_players)
-    # cProfile.run('play_one_game(num_players)', sort='cumtime')
+    # play_one_game(num_players)
+    cProfile.run('play_one_game(num_players)', sort='cumtime')
     # play_randomly_forever(num_players)
     # mcts_wins = 0
     # for i in range(100):

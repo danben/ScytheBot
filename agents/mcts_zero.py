@@ -181,11 +181,13 @@ class MCTSZeroAgent(Agent):
                 values[faction_name] = 1 if faction_name is game_state.winner else 0
             move_priors = {}
         else:
+            # values, move_priors = {faction: np.random.random() for faction in game_state.player_idx_by_faction_name.keys()}, {choice: np.random.random() for choice in choices}
             if self.evaluator_conn is not None:
                 self.evaluator_conn.send((game_state, choices))
                 values, move_priors = self.evaluator_conn.recv()
             else:
                 values, move_priors = model.evaluate(self.evaluator_network, [game_state], [choices])
+                values, move_priors = values[0], move_priors[0]
         new_node = Node.from_state(game_state, values, parent, move, move_priors)
         if parent is not None:
             parent.add_child(move, new_node)
