@@ -1,7 +1,7 @@
-from keras.activations import relu
-from keras.layers import Activation, BatchNormalization, Concatenate, Conv2D, Dense, Flatten, Input
-from keras.models import Model
-from keras.regularizers import l2
+from tensorflow.keras.activations import relu
+from tensorflow.keras.layers import Activation, BatchNormalization, Concatenate, Conv2D, Dense, Flatten, Input
+from tensorflow.keras.models import Model
+from tensorflow.keras.regularizers import l2
 
 from game import constants, game_state as gs
 from encoders import game_state as gs_enc
@@ -108,7 +108,8 @@ def evaluate(model, game_states, choices):
     encoded = [gs_enc.encode(game_state) for game_state in game_states]
     encoded_data = np.array([e.encoded_data() for e in encoded])
     boards = np.array([e.board for e in encoded])
-    inverted_preds = model.predict([boards, encoded_data], batch_size=len(game_states), use_multiprocessing=True)
+    inverted_preds = model.predict([boards, encoded_data], batch_size=len(game_states), use_multiprocessing=False)
+    # inverted_preds = model([boards, encoded_data], training=False)
     preds = []
     for i in range(len(game_states)):
         preds.append([inverted_preds[head][i] for head in range(len(Head))])
@@ -124,13 +125,13 @@ def empty_heads(len):
 
 if __name__ == '__main__':
     import tensorflow as tf
-    import keras.backend as K
+    # import keras.backend as K
     # tf.config.set_visible_devices([], 'GPU')
     # tf.debugging.set_log_device_placement(True)
     import os
     # K.set_floatx('float16')
     # K.set_epsilon(1e-4)
-    K.set_learning_phase(0)
+    # K.set_learning_phase(0)
 
     # V1
     # physical_devices = tf.config.experimental.list_physical_devices('GPU')

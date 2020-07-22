@@ -19,7 +19,7 @@ import numpy as np
 import random
 from multiprocessing import Queue
 
-from keras.models import load_model
+from tensorflow.keras.models import load_model
 
 from training import model, constants as model_const
 

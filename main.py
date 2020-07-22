@@ -5,7 +5,7 @@ import game.play as play
 import game.state_change as sc
 
 import cProfile
-import keras.backend as K
+import tensorflow.keras.backend as K
 import tensorflow as tf
 import logging
 
@@ -72,20 +72,10 @@ if __name__ == '__main__':
     # K.set_epsilon(1e-4)
     K.set_learning_phase(0)
 
-    # V1
-    # physical_devices = tf.config.experimental.list_physical_devices('GPU')
-    # tf.config.experimental.set_memory_growth(physical_devices[0], True)
-    # tf.compat.v1.config.optimizer.set_experimental_options({'layout_optimizer':True})
-
-    # V2
     physical_devices = tf.config.list_physical_devices('GPU')
     tf.config.experimental.set_memory_growth(physical_devices[0], True)
+    tf.compat.v1.disable_eager_execution()
 
-    # play_one_game(num_players)
-    # tf.config.set_visible_devices([], 'GPU')
-    # tf.debugging.set_log_device_placement(True)
-    # import os
-    # os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
     # play_one_game(num_players)
     cProfile.run('play_one_game(num_players)', sort='cumtime')
     # play_randomly_forever(num_players)

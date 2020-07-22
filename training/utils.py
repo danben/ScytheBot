@@ -1,6 +1,6 @@
-from keras.activations import relu
-from keras.layers import Activation, Add, BatchNormalization, Conv2D, Dense
-from keras.regularizers import l2
+from tensorflow.keras.activations import relu
+from tensorflow.keras.layers import Activation, Add, BatchNormalization, Conv2D, Dense
+from tensorflow.keras.regularizers import l2
 
 REGULARIZATION_FACTOR = 0.01
 

@@ -8,6 +8,7 @@ import game.state_change as sc
 import attr
 import numpy as np
 import logging
+import time
 
 from collections import  defaultdict
 
@@ -23,9 +24,8 @@ class ExperienceCollector:
     move_visits = attr.ib(factory=list)
     winner = attr.ib(default=None)
 
-    def record_move(self, game_state, choices, move_visits):
+    def record_move(self, game_state, move_visits):
         self.game_states.append(game_state)
-        self.legal_moves.append(choices)
         self.move_visits.append(move_visits)
 
     def complete_episode(self, winner):
@@ -64,9 +64,6 @@ class ExperienceCollector:
         values_and_move_probs = model.empty_heads(len(self.game_states))
         values_and_move_probs[model_const.Head.VALUE_HEAD.value][:, self.winner] = 1
         for i, game_state in enumerate(self.game_states):
-            assert len(self.legal_moves[i]) == len(self.move_visits[i])
-            for move in self.legal_moves[i]:
-                assert move in self.move_visits[i]
             top_action_class = game_state.action_stack.first.__class__
             if top_action_class is MoveOnePiece:
                 ExperienceCollector._assign_move_probs__move_one_piece(values_and_move_probs, i, self.move_visits[i])
@@ -163,7 +160,7 @@ class MCTSZeroAgent(Agent):
             p = node.prior(move)
             n = node.visit_count(move)
             score = q + self.c * p * np.sqrt(total_n) / (n + 1)
-            if logger.isEnabledFor((logging.DEBUG)):
+            if logger.isEnabledFor(logging.DEBUG):
                 logger.debug(f'Evaluating move {move}')
                 logger.debug(f'EV: {q}; P: {p}; VC: {n}; Score: {score}')
             return score
@@ -183,8 +180,10 @@ class MCTSZeroAgent(Agent):
         else:
             # values, move_priors = {faction: np.random.random() for faction in game_state.player_idx_by_faction_name.keys()}, {choice: np.random.random() for choice in choices}
             if self.evaluator_conn is not None:
+                t = time.time()
                 self.evaluator_conn.send((game_state, choices))
                 values, move_priors = self.evaluator_conn.recv()
+                # print(f'Took {time.time() - t}s to get evaluation results')
             else:
                 values, move_priors = model.evaluate(self.evaluator_network, [game_state], [choices])
                 values, move_priors = values[0], move_priors[0]
@@ -246,11 +245,11 @@ class MCTSZeroAgent(Agent):
 
         logging.getLogger().setLevel(old_level)
         legal_moves = root.moves()
-        move_visits = [root.visit_count(move) for move in legal_moves]
+        move_visits = {move: root.visit_count(move) for move in legal_moves}
         assert len(legal_moves) == len(move_visits)
-        self.experience_collector.record_move(game_state, legal_moves, move_visits)
-        total_moves = sum(move_visits)
-        probas = [mv / total_moves for mv in move_visits]
+        self.experience_collector.record_move(game_state, move_visits)
+        total_moves = sum(move_visits.values())
+        probas = [mv / total_moves for mv in move_visits.values()]
         if logger.isEnabledFor(logging.DEBUG):
             logger.debug(f'Probability distribution for {legal_moves}: {probas}')
         # Have to do this annoying thing because [legal_moves] might contain tuples

@@ -1,14 +1,15 @@
 import cProfile
 import logging
 import multiprocessing as mp
+import time
 
 import tensorflow as tf
 
 from training.learner import Learner
 
 NUM_PLAYERS = 2
-NUM_WORKERS = 1
-SIMULATIONS_PER_CHOICE = 10
+NUM_WORKERS = 4
+SIMULATIONS_PER_CHOICE = 5
 
 
 def run_n_times(n, game_state, agents):
@@ -28,8 +29,8 @@ def worker(wid, evaluator_conn, learner_queue, stop_after=None):
     game_state = GameState.from_num_players(NUM_PLAYERS)
     agents = [MCTSZeroAgent(c=0.8, simulations_per_choice=SIMULATIONS_PER_CHOICE, evaluator_conn=evaluator_conn)
               for _ in range(NUM_PLAYERS)]
-    cProfile.runctx('run_n_times(1, game_state, agents)', globals(), locals(), sort='cumtime')
-    time.sleep(10000)
+    # cProfile.runctx('run_n_times(1, game_state, agents)', globals(), locals(), sort='cumtime')
+    # time.sleep(10000)
 
     num_games = 0
     while stop_after is None or num_games >= stop_after:
@@ -60,16 +61,20 @@ def evaluator(conns):
     # import time
     physical_devices = tf.config.list_physical_devices('GPU')
     tf.config.experimental.set_memory_growth(physical_devices[0], True)
+    tf.compat.v1.disable_eager_execution()
     nn = model.network()
     while True:
         game_states = []
         choices = []
+        # print(f'Evaluator waiting for inputs')
+        t = time.time()
         for conn in conns:
             # TODO: don't fail if a worker dies
             gs, c = conn.recv()
             game_states.append(gs)
             choices.append(c)
-        # start = time.time()
+        # print(f'Took {time.time() - t}s to get all inputs')
+        start = time.time()
         values, priors = model.evaluate(nn, game_states, choices)
         # print(f'Prediction batch completed in {time.time() - start}s')
         for i, conn in enumerate(conns):
@@ -79,6 +84,7 @@ def evaluator(conns):
 def learner(model_base_path, training_queue):
     physical_devices = tf.config.list_physical_devices('GPU')
     tf.config.experimental.set_memory_growth(physical_devices[0], True)
+    tf.compat.v1.disable_eager_execution()
     Learner.from_file(model_base_path, training_queue).start()
 
 
