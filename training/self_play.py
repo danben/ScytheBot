@@ -3,9 +3,16 @@ import logging
 import multiprocessing as mp
 import time
 
+import numpy as np
 import tensorflow as tf
 
+from multiprocessing import shared_memory
+
+import training.constants as model_const
+
+from encoders.game_state import EncodedGameState
 from training.learner import Learner
+from training.shared_memory_manager import segment_name, DataType
 
 NUM_PLAYERS = 2
 NUM_WORKERS = 4
@@ -18,44 +25,9 @@ def run_n_times(n, game_state, agents):
         play.play_game(game_state, agents)
 
 
-def worker(wid, evaluator_conn, learner_queue, stop_after=None):
-    from agents.mcts_zero import MCTSZeroAgent
-    from game.game_state import GameState
-    from play import play
-    import time
-    print(f'Worker {wid} starting')
-    if logging.getLogger().isEnabledFor(logging.DEBUG):
-        logging.debug(f'Worker {wid} starting')
-    game_state = GameState.from_num_players(NUM_PLAYERS)
-    agents = [MCTSZeroAgent(c=0.8, simulations_per_choice=SIMULATIONS_PER_CHOICE, evaluator_conn=evaluator_conn)
-              for _ in range(NUM_PLAYERS)]
-    # cProfile.runctx('run_n_times(1, game_state, agents)', globals(), locals(), sort='cumtime')
-    # time.sleep(10000)
-
-    num_games = 0
-    while stop_after is None or num_games >= stop_after:
-        for agent in agents:
-            agent.begin_episode()
-        if logging.getLogger().isEnabledFor(logging.DEBUG):
-            logging.debug(f'Worker {wid} starting a self-play match')
-        print(f'Worker {wid} starting a self-play match')
-        start = time.time()
-        play.play_game(game_state, agents)
-        end = time.time()
-        if logging.getLogger().isEnabledFor(logging.DEBUG):
-            logging.debug(f'Worker {wid} finished a game at {end} ({end - start} seconds)')
-        print(f'Worker {wid} finished a game at {end} ({end - start} seconds)')
-        for agent in agents:
-            agent.complete_episode(game_state.winner)
-            if logging.getLogger().isEnabledFor(logging.DEBUG):
-                logging.debug(f'Worker {wid} adding {len(agent.experience_collector.game_states)} '
-                              f'samples to learner queue')
-            print(f'Worker {wid} adding {len(agent.experience_collector.game_states)} samples to learner queue')
-            learner_queue.put(agent.experience_collector.to_numpy())
-        num_games += 1
-
-
-def evaluator(conns):
+def evaluator(envs):
+    # An environment is a group of workers and a single index. Each worker will be simulating multiple
+    # games sequentially; it will put game states from game N into environment N.
     from training import model
     import tensorflow as tf
     # import time
@@ -63,22 +35,59 @@ def evaluator(conns):
     tf.config.experimental.set_memory_growth(physical_devices[0], True)
     tf.compat.v1.disable_eager_execution()
     nn = model.network()
+    # Set up shared memory buffers. Each contains all of the memory for one data type in a single environment.
+    # Each element of preds will be a list of arrays corresponding to each model head.
+    boards, data, preds = [], [], []
+    num_workers = len(envs[0])
+    for env_id, worker_pipes in envs.items():
+        # Get the batch from shared memory
+        boards_buf = shared_memory.SharedMemory(name=segment_name(env_id, DataType.BOARDS))
+        data_buf = shared_memory.SharedMemory(name=segment_name(env_id, DataType.DATA))
+
+        # Put into the right shapes
+        boards_shape = (len(worker_pipes),) + EncodedGameState.board_shape
+        boards.append(np.ndarray(boards_shape, buffer=boards_buf))
+
+        data_shape = (len(worker_pipes),) + EncodedGameState.data_shape
+        data.append(np.ndarray(data_shape, buffer=data_buf))
+
+        heads = []
+        for head in model_const.Head:
+            head_buf = shared_memory.SharedMemory(name=f'{segment_name(env_id, DataType.PREDS)}-{head.value}')
+            head_shape = (len(worker_pipes), model.head_sizes[head])
+            heads.append(np.ndarray(head_shape, buffer=head_buf))
+        preds.append(heads)
+
     while True:
-        game_states = []
-        choices = []
-        # print(f'Evaluator waiting for inputs')
-        t = time.time()
-        for conn in conns:
-            # TODO: don't fail if a worker dies
-            gs, c = conn.recv()
-            game_states.append(gs)
-            choices.append(c)
-        # print(f'Took {time.time() - t}s to get all inputs')
-        start = time.time()
-        values, priors = model.evaluate(nn, game_states, choices)
-        # print(f'Prediction batch completed in {time.time() - start}s')
-        for i, conn in enumerate(conns):
-            conn.send((values[i], priors[i]))
+        for env_id, worker_pipes in envs.items():
+            # Block until every worker has sent in a sample for evaluation in
+            # this environment
+            for p in worker_conns:
+                p.recv()
+
+            predictions = nn.predict(boards[env_id], data[env_id], batch_size=num_workers)
+            for head in model_const.Head:
+                preds[head.value][:]  = predictions[head.value]
+
+            # Notify the workers that their predictions are ready
+            for p in worker_conns:
+                p.send(0)
+        #
+        # game_states = []
+        # choices = []
+        # # print(f'Evaluator waiting for inputs')
+        # t = time.time()
+        # for conn in conns:
+        #     # TODO: don't fail if a worker dies
+        #     gs, c = conn.recv()
+        #     game_states.append(gs)
+        #     choices.append(c)
+        # # print(f'Took {time.time() - t}s to get all inputs')
+        # start = time.time()
+        # values, priors = model.evaluate(nn, game_states, choices)
+        # # print(f'Prediction batch completed in {time.time() - start}s')
+        # for i, conn in enumerate(conns):
+        #     conn.send((values[i], priors[i]))
 
 
 def learner(model_base_path, training_queue):

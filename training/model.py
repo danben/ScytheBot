@@ -108,8 +108,11 @@ def evaluate(model, game_states, choices):
     encoded = [gs_enc.encode(game_state) for game_state in game_states]
     encoded_data = np.array([e.encoded_data() for e in encoded])
     boards = np.array([e.board for e in encoded])
+    # This will give us a list of [len(game_states)] predictions for each head
     inverted_preds = model.predict([boards, encoded_data], batch_size=len(game_states), use_multiprocessing=False)
     # inverted_preds = model([boards, encoded_data], training=False)
+
+    # What we really want is a list of samples, where each sample contains a single prediction for each head
     preds = []
     for i in range(len(game_states)):
         preds.append([inverted_preds[head][i] for head in range(len(Head))])

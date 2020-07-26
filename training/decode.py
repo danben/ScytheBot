@@ -35,6 +35,7 @@ def decode_top_cube_space(choice):
     return enc_gs.EncodedPlayerMat.TOP_ACTION_CUBES_OFFSETS_BY_TOP_ACTION_TYPE[top_action_typ] + offset
 
 
+# These functions will translate a legal move to an index into the appropriate output head of the model
 decoders = {
     Optional: decode_boolean,
     Boolean: decode_boolean,

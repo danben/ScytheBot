@@ -231,7 +231,7 @@ class EncodedGameState:
     top_action__space_encoding = attr.ib()
     top_action__power_encoding = attr.ib()
 
-    board_shape = (BOARD_ENCODING__TOTAL_PLANES, constants.BOARD_ROWS, constants.BOARD_COLS)
+    board_shape = (constants.BOARD_ROWS, constants.BOARD_COLS, BOARD_ENCODING__TOTAL_PLANES)
     data_shape = (HOME_BASE_ENCODING_SIZE_PER_PLAYER * constants.MAX_PLAYERS + constants.NUM_STRUCTURE_BONUSES
                   + constants.NUM_COMBAT_CARD_VALUES + EncodedPlayer.shape_as_self[0]
                   + EncodedPlayer.shape_as_other[0] * (constants.MAX_PLAYERS - 1)
@@ -295,13 +295,10 @@ def encode_home_base(home_bases, index_by_faction_name, space):
         home_bases[start_plane + HOME_BASE__WORKER_OFFSET] = len(space.worker_keys) / constants.NUM_WORKERS
 
 
-BOARD_SHAPE = (constants.BOARD_ROWS, constants.BOARD_COLS, BOARD_ENCODING__TOTAL_PLANES)
-
-
 def encode_board(game_state, index_by_faction_name):
     player_planes = constants.MAX_PLAYERS * BOARD_ENCODING__PLANES_PER_PLAYER
     num_planes = player_planes + BOARD_ENCODING__EXTRA_PLANES
-    board = np.zeros(BOARD_SHAPE)
+    board = np.zeros(EncodedGameState.board_shape)
     home_bases = np.zeros(HOME_BASE_ENCODING_SIZE_PER_PLAYER * constants.MAX_PLAYERS)
     for space in game_state.board.board_spaces_by_coords.values():
         row, col = space.coords

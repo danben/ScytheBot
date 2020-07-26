@@ -20,11 +20,11 @@ logger.setLevel(logging.ERROR)
 class ExperienceCollector:
     indices_by_faction_name = attr.ib()
     game_states = attr.ib(factory=list)
-    legal_moves = attr.ib(factory=list)
     move_visits = attr.ib(factory=list)
     winner = attr.ib(default=None)
 
     def record_move(self, game_state, move_visits):
+        print(f'Recording a move')
         self.game_states.append(game_state)
         self.move_visits.append(move_visits)
 
@@ -62,7 +62,7 @@ class ExperienceCollector:
         encoded_boards = np.array([egs.board for egs in encoded_game_states])
         encoded_data = np.array([egs.encoded_data() for egs in encoded_game_states])
         values_and_move_probs = model.empty_heads(len(self.game_states))
-        values_and_move_probs[model_const.Head.VALUE_HEAD.value][:, self.winner] = 1
+        values_and_move_probs[model_const.Head.VALUE_HEAD.value][:, self.indices_by_faction_name[self.winner]] = 1
         for i, game_state in enumerate(self.game_states):
             top_action_class = game_state.action_stack.first.__class__
             if top_action_class is MoveOnePiece:
@@ -138,6 +138,7 @@ class Node:
             node = node.parent
 
 
+# TODO: IMPORTANT - SHARE THE TREE BETWEEN SIMULATIONS OF THE SAME GAME
 @attr.s(slots=True)
 class MCTSZeroAgent(Agent):
     simulations_per_choice = attr.ib()
@@ -193,7 +194,7 @@ class MCTSZeroAgent(Agent):
         return new_node
 
     def select_move(self, game_state):
-        if not self.experience_collector:
+        if self.experience_collector is None:
             indices_by_faction_name = gs_enc.get_indices_by_faction_name(game_state)
             self.experience_collector = ExperienceCollector(indices_by_faction_name)
 

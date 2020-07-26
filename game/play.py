@@ -24,6 +24,7 @@ def finalize(game_state):
             winning_score = player_scores[faction_name]
             winner = faction_name
     game_state = attr.evolve(game_state, player_scores=player_scores, winner=winner)
+    logging.debug(f'Returning game state with winner: {game_state.winner}')
     return game_state
 
 
@@ -42,6 +43,7 @@ def apply_move(game_state, move):
         if not game_state.action_stack:
             game_state = sc.end_turn(game_state)
             if game_state.num_turns == constants.MAX_TURNS_PER_PLAYER * len(game_state.players_by_idx):
+                logging.debug(f'Finalizing game after maximum of {game_state.num_turns} turns reached')
                 return finalize(game_state)
             game_state = sc.push_action(game_state, _take_turn)
         elif isinstance(game_state.action_stack.first, MaybePayCost) and \
@@ -54,4 +56,5 @@ def apply_move(game_state, move):
         return game_state
     except GameOver as e:
         game_state = sc.end_turn(e.game_state)
+        logging.debug(f'Finalizing game since end condition was reached')
         return finalize(game_state)
