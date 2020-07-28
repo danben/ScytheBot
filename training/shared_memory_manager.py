@@ -1,7 +1,6 @@
 import attr
 import numpy as np
 import logging
-import os
 
 from enum import Enum
 
@@ -38,49 +37,47 @@ def get_preds_shape(num_workers, head):
 @attr.s(slots=True)
 class Env:
     boards_shared = attr.ib()
-    # data_shared = attr.ib()
-    # preds_shared = attr.ib()
+    data_shared = attr.ib()
+    preds_shared = attr.ib()
 
     @classmethod
     def init(cls, num_workers, env_id):
         boards_shape = get_boards_shape(num_workers)
         boards_dummy = np.ndarray(boards_shape, dtype=np.float64)
-        # data_shape = get_data_shape(num_workers)
-        # data_dummy = np.ndarray(data_shape, dtype=np.float64)
-        # preds_dummies = [np.ndarray(get_preds_shape(num_workers, head), dtype=np.float64) for head in model_const.Head]
-        # if logging.getLogger().isEnabledFor(logging.DEBUG):
-        #     logging.debug(f'Creating segment \'{get_segment_name(env_id, DataType.BOARDS)}\' with size {boards_dummy.nbytes}')
-            # logging.debug(f'Creating segment \'{get_segment_name(env_id, DataType.DATA)}\' with size {data_dummy.nbytes}')
-            # for head in model_const.Head:
-            #     logging.debug(f'Creating segment \'{get_segment_name(env_id, DataType.PREDS, head)}\' with size {preds_dummies[head.value].nbytes}')
-
-        print(f'Creating segment \'{get_segment_name(env_id, DataType.BOARDS)}\' with size {boards_dummy.nbytes}')
+        data_shape = get_data_shape(num_workers)
+        data_dummy = np.ndarray(data_shape, dtype=np.float64)
+        preds_dummies = [np.ndarray(get_preds_shape(num_workers, head), dtype=np.float64) for head in model_const.Head]
+        if logging.getLogger().isEnabledFor(logging.DEBUG):
+            logging.debug(f'Creating segment \'{get_segment_name(env_id, DataType.BOARDS)}\' with size {boards_dummy.nbytes}')
+            logging.debug(f'Creating segment \'{get_segment_name(env_id, DataType.DATA)}\' with size {data_dummy.nbytes}')
+            for head in model_const.Head:
+                logging.debug(f'Creating segment \'{get_segment_name(env_id, DataType.PREDS, head)}\' with size {preds_dummies[head.value].nbytes}')
         boards_shared = shared_memory.SharedMemory(name=get_segment_name(env_id, DataType.BOARDS), create=True,
                                                    size=boards_dummy.nbytes)
-        # data_shared = shared_memory.SharedMemory(name=get_segment_name(env_id, DataType.DATA), create=True,
-        #                                          size=data_dummy.nbytes)
-        # preds_shared = [shared_memory.SharedMemory(name=get_segment_name(env_id, DataType.PREDS, head), create=True,
-        #                                            size=preds_dummies[head.value].nbytes)
-        #                 for head in model_const.Head]
-        return cls(boards_shared) #, data_shared, preds_shared)
+        data_shared = shared_memory.SharedMemory(name=get_segment_name(env_id, DataType.DATA), create=True,
+                                                 size=data_dummy.nbytes)
+        preds_shared = [shared_memory.SharedMemory(name=get_segment_name(env_id, DataType.PREDS, head), create=True,
+                                                   size=preds_dummies[head.value].nbytes)
+                        for head in model_const.Head]
+        return cls(boards_shared, data_shared, preds_shared)
 
 
 @attr.s(slots=True)
 class View:
     board = attr.ib()
-    # data = attr.ib()
-    # preds = attr.ib()
+    data = attr.ib()
+    preds = attr.ib()
 
     @classmethod
     def for_evaluator(cls, env, num_workers):
         boards_shape = get_boards_shape(num_workers)
-        # data_shape = get_data_shape(num_workers)
-        # preds_shapes = [get_preds_shape(num_workers, head) for head in model_const.Head]
+        data_shape = get_data_shape(num_workers)
+        preds_shapes = [get_preds_shape(num_workers, head) for head in model_const.Head]
         board = np.ndarray(boards_shape, dtype=np.float64, buffer=env.boards_shared.buf)
-        # data = np.ndarray(data_shape, dtype=np.float64, buffer=env.data_shared.buf)
-        # preds = [np.ndarray(preds_shapes[i], dtype=np.float64, buffer=env.preds_shared[i].buf)
-        #          for i in range(len(preds_shapes))]
-        return cls(board) #, data, preds)
+        data = np.ndarray(data_shape, dtype=np.float64, buffer=env.data_shared.buf)
+        preds = [np.ndarray(preds_shapes[i], dtype=np.float64, buffer=env.preds_shared[i].buf)
+                 for i in range(len(preds_shapes))]
+        return cls(board, data, preds)
 
     @classmethod
     def for_worker(cls, env, num_workers, worker_id):
@@ -91,15 +88,10 @@ class View:
             logging.debug(f'Shape of board buffer for worker: {evaluator_view.board[worker_id].shape}')
         board = np.ndarray(gs_enc.EncodedGameState.board_shape, dtype=np.float64,
                            buffer=evaluator_view.board[worker_id])
-        print(f'About to look at id {id(board)} (process {os.getpid()})')
-        print(board[0,0,0])
-        print(f'Doing it again')
-        print(board[0,1,0])
-        return board
-        # data = np.ndarray(gs_enc.EncodedGameState.data_shape, dtype=np.float64, buffer=evaluator_view.data[worker_id])
-        # preds = [np.ndarray((model.head_sizes[head],), dtype=np.float64,
-        #                     buffer=evaluator_view.preds[head.value][worker_id]) for head in model_const.Head]
-        # return cls(board) #, data, preds)
+        data = np.ndarray(gs_enc.EncodedGameState.data_shape, dtype=np.float64, buffer=evaluator_view.data[worker_id])
+        preds = [np.ndarray((model.head_sizes[head],), dtype=np.float64,
+                            buffer=evaluator_view.preds[head.value][worker_id]) for head in model_const.Head]
+        return cls(board, data, preds)
 
 
 @attr.s(slots=True)
@@ -123,10 +115,10 @@ class SharedMemoryManager:
             for head in model_const.Head:
                 logging.debug(f'Requesting shared memory segment {get_segment_name(env_id, DataType.PREDS, head)}')
         boards_shared = shared_memory.SharedMemory(name=get_segment_name(env_id, DataType.BOARDS))
-        # data_shared = shared_memory.SharedMemory(name=get_segment_name(env_id, DataType.DATA))
-        # preds_shared = [shared_memory.SharedMemory(name=get_segment_name(env_id, DataType.PREDS, head))
-        #                 for head in model_const.Head]
-        return Env(boards_shared) #, data_shared, preds_shared)
+        data_shared = shared_memory.SharedMemory(name=get_segment_name(env_id, DataType.DATA))
+        preds_shared = [shared_memory.SharedMemory(name=get_segment_name(env_id, DataType.PREDS, head))
+                        for head in model_const.Head]
+        return Env(boards_shared, data_shared, preds_shared)
 
     @staticmethod
     def get_worker_view(env_id, num_workers, worker_id):

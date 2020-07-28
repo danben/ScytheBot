@@ -16,6 +16,7 @@ class WorkerEnv:
     id = attr.ib()
     worker_id = attr.ib()
     agents = attr.ib()
+    shm_envs = attr.ib()
     board_buf = attr.ib()
     data_buf = attr.ib()
     preds_bufs = attr.ib()
@@ -23,13 +24,14 @@ class WorkerEnv:
     select_move_gen = attr.ib(default=None)
 
     @classmethod
-    def init(cls, id, worker_id, num_players, c, simulations_per_choice):
+    def init(cls, id, worker_id, num_envs, num_players, c, simulations_per_choice):
         agents = [MCTSZeroAgent(c=c, simulations_per_choice=simulations_per_choice) for _ in range(num_players)]
+        shm_envs = [shared_memory_manager.SharedMemoryManager.make_env(env_id) for env_id in range(num_envs)]
         board_buf = shared_memory_manager.get_buffer(id, worker_id, shared_memory_manager.DataType.BOARDS)
         data_buf = shared_memory_manager.get_buffer(id, worker_id, shared_memory_manager.DataType.DATA)
         preds_bufs = [shared_memory_manager.get_buffer(id, worker_id, shared_memory_manager.DataType.PREDS, h)
                       for h in model_const.Head]
-        return cls(id, worker_id, agents, board_buf, data_buf, preds_bufs)
+        return cls(id, worker_id, agents, shm_envs, board_buf, data_buf, preds_bufs)
 
     # As long as we haven't just started, there should be a probability distribution waiting for us.
     # Decode it to get the next move of the simulation, apply that to our game state, and encode

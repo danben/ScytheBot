@@ -37,23 +37,26 @@ def evaluator(envs):
     nn = model.network()
     # Set up shared memory buffers. Each contains all of the memory for one data type in a single environment.
     # Each element of preds will be a list of arrays corresponding to each model head.
-    boards, data, preds = [], [], []
+    boards, data, preds, shms = [], [], [], []
     num_workers = len(envs[0])
     for env_id, worker_pipes in envs.items():
         # Get the batch from shared memory
         boards_buf = shared_memory.SharedMemory(name=segment_name(env_id, DataType.BOARDS))
+        shms.append(boards_buf)
         data_buf = shared_memory.SharedMemory(name=segment_name(env_id, DataType.DATA))
+        shms.append(data_buf)
 
         # Put into the right shapes
-        boards_shape = (len(worker_pipes),) + EncodedGameState.board_shape
+        boards_shape = (num_workers,) + EncodedGameState.board_shape
         boards.append(np.ndarray(boards_shape, buffer=boards_buf))
 
-        data_shape = (len(worker_pipes),) + EncodedGameState.data_shape
+        data_shape = (num_workers,) + EncodedGameState.data_shape
         data.append(np.ndarray(data_shape, buffer=data_buf))
 
         heads = []
         for head in model_const.Head:
             head_buf = shared_memory.SharedMemory(name=f'{segment_name(env_id, DataType.PREDS)}-{head.value}')
+            shms.append(head_buf)
             head_shape = (len(worker_pipes), model.head_sizes[head])
             heads.append(np.ndarray(head_shape, buffer=head_buf))
         preds.append(heads)
@@ -62,15 +65,16 @@ def evaluator(envs):
         for env_id, worker_pipes in envs.items():
             # Block until every worker has sent in a sample for evaluation in
             # this environment
-            for p in worker_conns:
+            for p in worker_pipes:
                 p.recv()
 
             predictions = nn.predict(boards[env_id], data[env_id], batch_size=num_workers)
             for head in model_const.Head:
-                preds[head.value][:]  = predictions[head.value]
+                assert preds[head.value].shape == predictions[head.value].shape
+                preds[head.value][:] = predictions[head.value]
 
             # Notify the workers that their predictions are ready
-            for p in worker_conns:
+            for p in worker_pipes:
                 p.send(0)
         #
         # game_states = []
