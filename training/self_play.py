@@ -1,3 +1,4 @@
+import asyncio
 import cProfile
 import logging
 import multiprocessing as mp
@@ -12,10 +13,14 @@ import training.constants as model_const
 
 from encoders.game_state import EncodedGameState
 from training.learner import Learner
-from training.shared_memory_manager import get_segment_name, DataType
+from training.model import load as load_model
+from training.shared_memory_manager import get_segment_name, DataType, SharedMemoryManager
+from training.simulator import worker
+from training.worker_env_conn import WorkerEnvConn
 
 NUM_PLAYERS = 2
 NUM_WORKERS = 4
+NUM_ENVS = 2
 SIMULATIONS_PER_CHOICE = 5
 
 
@@ -25,7 +30,7 @@ def run_n_times(n, game_state, agents):
         play.play_game(game_state, agents)
 
 
-def evaluator(envs, nn):
+def evaluator(num_envs, num_workers, model_base_path):
     # An environment is a group of workers and a single index. Each worker will be simulating multiple
     # games sequentially; it will put game states from game N into environment N.
     from training import model
@@ -37,8 +42,7 @@ def evaluator(envs, nn):
     # Set up shared memory buffers. Each contains all of the memory for one data type in a single environment.
     # Each element of preds will be a list of arrays corresponding to each model head.
     boards, data, preds, shms = [], [], [], []
-    num_workers = len(envs[0])
-    for env_id in range(len(envs)):
+    for env_id in range(num_envs):
         # Get the batch from shared memory
         boards_buf = shared_memory.SharedMemory(name=get_segment_name(env_id, DataType.BOARDS))
         shms.append(boards_buf)
@@ -60,12 +64,13 @@ def evaluator(envs, nn):
             heads.append(np.ndarray(head_shape, buffer=head_buf))
         preds.append(heads)
 
-    while True:
-        for env_id, worker_pipes in enumerate(envs):
+    nn = load_model(model_base_path)
+
+    def env_loop(env_id, worker_env_conns):
+        while True:
             # Block until every worker has sent in a sample for evaluation in
             # this environment
-            for p in worker_pipes:
-                p.recv()
+            asyncio.wait([worker_env_conn.env_get_woken_up() for worker_env_conn in worker_env_conns])
 
             predictions = nn.predict(boards[env_id], data[env_id], batch_size=num_workers)
             for head in model_const.Head:
@@ -73,24 +78,11 @@ def evaluator(envs, nn):
                 preds[env_id][head.value][:] = predictions[head.value]
 
             # Notify the workers that their predictions are ready
-            for p in worker_pipes:
-                p.send(0)
-        #
-        # game_states = []
-        # choices = []
-        # # print(f'Evaluator waiting for inputs')
-        # t = time.time()
-        # for conn in conns:
-        #     # TODO: don't fail if a worker dies
-        #     gs, c = conn.recv()
-        #     game_states.append(gs)
-        #     choices.append(c)
-        # # print(f'Took {time.time() - t}s to get all inputs')
-        # start = time.time()
-        # values, priors = model.evaluate(nn, game_states, choices)
-        # # print(f'Prediction batch completed in {time.time() - start}s')
-        # for i, conn in enumerate(conns):
-        #     conn.send((values[i], priors[i]))
+            for worker_env_conn in worker_env_conns:
+                worker_env_conn.wake_up_worker()
+
+    asyncio.wait([env_loop(env_id, [WorkerEnvConn.for_env(env_id, worker_id) for worker_id in num_workers])
+                  for env_id in range(num_envs)])
 
 
 def learner(model_base_path, training_queue):
@@ -105,12 +97,15 @@ if __name__ == '__main__':
     worker_conns = []
     workers = []
     learner_queue = mp.Queue()
+    smm = SharedMemoryManager.init(NUM_WORKERS, NUM_ENVS)
     for id in range(NUM_WORKERS):
         conn1, conn2 = mp.Pipe()
         worker_conns.append(conn1)
-        p = mp.Process(target=worker, args=(id, conn2, learner_queue))
+        p = mp.Process(target=worker, args=(id, NUM_WORKERS, NUM_ENVS, learner_queue, NUM_PLAYERS,
+                                            SIMULATIONS_PER_CHOICE))
         workers.append(p)
         p.start()
     model_base_path = 'C:\\Users\\dan\\PycharmProjects\\ScytheBot\\training\\data'
-    mp.Process(target=evaluator, args=(worker_conns,)).start()
+
+    mp.Process(target=evaluator, args=(NUM_ENVS, NUM_WORKERS, model_base_path)).start()
     mp.Process(target=learner, args=(model_base_path, learner_queue)).start()

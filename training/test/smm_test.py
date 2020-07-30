@@ -1,12 +1,11 @@
 import asyncio
 import multiprocessing as mp
 import numpy as np
-import os
-import time
 
 from encoders import game_state as gs_enc
 from training import model, constants as model_const
 from training import shared_memory_manager
+from training.worker_env_conn import WorkerEnvConn
 
 
 def board_value(env_id, worker_id, row, col, plane):
@@ -47,44 +46,33 @@ def check_preds(preds, env_id, worker_id):
             assert preds[head.value][index] == pred_value(env_id, worker_id, head, index)
 
 
-def get_fifo_name(worker_id, env_id, suffix):
-    return f'/tmp/fifo-{worker_id}-{env_id}-{suffix}'
-
-
-def receive_from(fd):
-    loop = asyncio.get_event_loop()
-    future = loop.create_future()
-
-    def set_determined():
-        result = fd.read(1)
-        future.set_result(result[0])
-        loop.remove_reader(fd)
-
-    loop.add_reader(fd, set_determined)
-    return future
+def clear_preds(preds):
+    for head in model_const.Head:
+        preds[head.value][:] = 0
 
 
 async def worker_coro(env_id, num_workers, worker_id):
     # A worker should write down some fake data into its reserved area for game encodings, sleep, and then
     # read back prediction data.
     print(f'Worker {worker_id+1} of {num_workers} starting for environment {env_id}')
-    conn_out = open(get_fifo_name(worker_id, env_id, "encoding"), 'a+b', buffering=0)
-    conn_in = open(get_fifo_name(worker_id, env_id, "preds"), 'rb', buffering=0)
+    worker_env_conn = WorkerEnvConn.for_worker(env_id=env_id, worker_id=worker_id)
     env = shared_memory_manager.SharedMemoryManager.make_env(env_id)
     my_view = shared_memory_manager.View.for_worker(env, num_workers, worker_id)
     assert my_view.board.shape == gs_enc.EncodedGameState.board_shape
     assert my_view.data.shape == gs_enc.EncodedGameState.data_shape
     for i, p in enumerate(my_view.preds):
         assert p.shape == (model.head_sizes[model_const.Head(i)],)
-    board_data = np.fromfunction(lambda x, y, z: board_value(env_id, worker_id, x, y, z), my_view.board.shape)
-    my_view.board[:] = board_data
-    data_data = np.fromfunction(lambda x: data_value(env_id, worker_id, x), my_view.data.shape)
-    my_view.data[:] = data_data
-    print(f'Worker {worker_id+1} signalling evaluator for environment {env_id}')
-    conn_out.write(bytes([worker_id]))
-    received_env_id = await receive_from(conn_in)
-    print(f'Worker {worker_id+1} received signal from evaluator {received_env_id} (expected: {env_id})')
-    check_preds(my_view.preds, env_id, worker_id)
+    while True:
+        board_data = np.fromfunction(lambda x, y, z: board_value(env_id, worker_id, x, y, z), my_view.board.shape)
+        my_view.board[:] = board_data
+        data_data = np.fromfunction(lambda x: data_value(env_id, worker_id, x), my_view.data.shape)
+        my_view.data[:] = data_data
+        print(f'Worker {worker_id+1} signalling evaluator for environment {env_id}')
+        worker_env_conn.wake_up_env(worker_id)
+        received_env_id = await worker_env_conn.worker_get_woken_up()
+        print(f'Worker {worker_id+1} received signal from evaluator {received_env_id} (expected: {env_id})')
+        check_preds(my_view.preds, env_id, worker_id)
+        clear_preds(my_view.preds)
 
 
 def worker(num_envs, num_workers, worker_id):
@@ -92,9 +80,8 @@ def worker(num_envs, num_workers, worker_id):
 
 
 async def evaluator_coro(num_workers, env_id):
-    conns_in = [open(get_fifo_name(worker_id, env_id, "encoding"), 'rb', buffering=0) for worker_id in range(num_workers)]
-    conns_out = [open(get_fifo_name(worker_id, env_id, "preds"), 'a+b', buffering=0) for worker_id in range(num_workers)]
     print(f'Evaluator {env_id} starting up')
+    worker_env_conns = [WorkerEnvConn.for_env(env_id=env_id, worker_id=worker_id) for worker_id in range(num_workers)]
     # An evaluator should sleep, read data for game encodings, and then write back prediction data.
     env = shared_memory_manager.SharedMemoryManager.make_env(env_id)
     my_view = shared_memory_manager.View.for_evaluator(env, num_workers)
@@ -102,19 +89,23 @@ async def evaluator_coro(num_workers, env_id):
     assert my_view.data.shape == (num_workers,) + gs_enc.EncodedGameState.data_shape
     for i, pred_head in enumerate(my_view.preds):
         assert pred_head.shape == (num_workers, model.head_sizes[model_const.Head(i)])
-    for conn in conns_in:
-        worker_id = await receive_from(conn)
-        print(f'Evaluator {env_id} received a wake-up signal from worker {worker_id+1}')
-    print(f'Evaluator {env_id} received all wake-up signals')
-    check_boards(my_view.board, num_workers, env_id)
-    check_data(my_view.data, num_workers, env_id)
-    for head in model_const.Head:
-        for worker_id in range(num_workers):
-            for index in range(model.head_sizes[head]):
-                my_view.preds[head.value][worker_id, index] = pred_value(env_id, worker_id, head, index)
-    print(f'Evaluator {env_id} notifying all workers that their predictions are ready')
-    for conn in conns_out:
-        conn.write(bytes([env_id]))
+
+    while True:
+        for conn in worker_env_conns:
+            worker_id = await conn.env_get_woken_up()
+            print(f'Evaluator {env_id} received a wake-up signal from worker {worker_id+1}')
+        print(f'Evaluator {env_id} received all wake-up signals')
+        check_boards(my_view.board, num_workers, env_id)
+        my_view.board[:] = 0
+        check_data(my_view.data, num_workers, env_id)
+        my_view.data[:] = 0
+        for head in model_const.Head:
+            for worker_id in range(num_workers):
+                for index in range(model.head_sizes[head]):
+                    my_view.preds[head.value][worker_id, index] = pred_value(env_id, worker_id, head, index)
+        print(f'Evaluator {env_id} notifying all workers that their predictions are ready')
+        for conn in worker_env_conns:
+            conn.wake_up_worker(env_id)
 
 
 def evaluator(num_workers, num_envs):
@@ -128,13 +119,6 @@ def test():
     num_workers = 3
     envs_per_worker = 3
     smm = shared_memory_manager.SharedMemoryManager.init(num_workers, envs_per_worker)
-    for worker_id in range(num_workers):
-        for env_id in range(envs_per_worker):
-            for suffix in ["encoding", "preds"]:
-                fifo_name = get_fifo_name(worker_id, env_id, suffix)
-                if os.path.exists(fifo_name):
-                    os.unlink(fifo_name)
-                os.mkfifo(fifo_name)
     procs = []
     for worker_id in range(num_workers):
             p = mp.Process(target=worker, args=(envs_per_worker, num_workers, worker_id))
@@ -147,11 +131,6 @@ def test():
 
     for p in procs:
         p.join()
-
-    for worker_id in range(num_workers):
-        for env_id in range(envs_per_worker):
-            for suffix in ["encoding", "preds"]:
-                os.unlink(get_fifo_name(worker_id, env_id, suffix))
 
     smm.unlink()
 

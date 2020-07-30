@@ -17,11 +17,7 @@ import logging
 import os
 import numpy as np
 
-from tensorflow.keras.models import load_model
-
 from training import model, constants as model_const
-
-MODEL_FILE_NAME = "model.h5"
 
 
 @attr.s
@@ -33,13 +29,7 @@ class Learner:
 
     @classmethod
     def from_file(cls, model_base_path, training_queue):
-        model_file = os.path.join(model_base_path, MODEL_FILE_NAME)
-        if os.path.exists(model_file):
-            network = load_model(model_file)
-        else:
-            network = model.network()
-            network.compile(optimizer='SGD', loss='categorical_crossentropy')
-        return cls(model_base_path, network, training_queue)
+        return cls(model_base_path, model.load(model_base_path), training_queue)
 
     def start(self):
         while True:

@@ -144,7 +144,7 @@ class MCTSZeroAgent(Agent):
     simulations_per_choice = attr.ib()
     c = attr.ib()
     view = attr.ib()
-    evaluator_conn = attr.ib()
+    worker_env_conn = attr.ib()
     experience_collector = attr.ib(default=None)
 
     def begin_episode(self):
@@ -187,8 +187,8 @@ class MCTSZeroAgent(Agent):
             encoded_data = encoded_game_state.encoded_data()
             assert self.view.data.shape == encoded_data.shape
             self.view.data[:] = encoded_data
-            await self.evaluator_conn.send(0)
-            await self.evaluator_conn.recv()
+            self.worker_env_conn.wake_up_env()
+            await self.worker_env_conn.worker_get_woken_up()
             # Read the predictions out of shared memory and convert them to values and move priors
             values, move_priors = model.to_values_and_move_priors(game_state, choices, self.view.preds)
             # print(f'Took {time.time() - t}s to get evaluation results')
@@ -210,7 +210,7 @@ class MCTSZeroAgent(Agent):
 
         old_level = logging.getLogger().level
         logging.getLogger().setLevel(logging.ERROR)
-        root = self.create_node(game_state, choices)
+        root = await self.create_node(game_state, choices)
 
         for i in range(self.simulations_per_choice * len(choices)):
             logger.debug('STARTING AT THE ROOT')

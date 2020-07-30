@@ -1,6 +1,6 @@
 from tensorflow.keras.activations import relu
 from tensorflow.keras.layers import Activation, BatchNormalization, Concatenate, Conv2D, Dense, Flatten, Input
-from tensorflow.keras.models import Model
+from tensorflow.keras.models import load_model, Model
 from tensorflow.keras.regularizers import l2
 
 from game import constants, game_state as gs
@@ -11,6 +11,8 @@ from training.constants import Head
 import numpy as np
 import time
 
+
+MODEL_FILE_NAME = "model.h5"
 NUM_RESIDUAL_BLOCKS = 5
 
 head_sizes = {
@@ -129,6 +131,16 @@ def to_values_and_move_priors(game_state, choices, preds):
 
 def empty_heads(len):
     return [np.zeros((len, head_sizes[h])) for h in Head]
+
+
+def load(model_base_path):
+    model_file = os.path.join(model_base_path, MODEL_FILE_NAME)
+    if os.path.exists(model_file):
+        nn = load_model(model_file)
+    else:
+        nn = network()
+        nn.compile(optimizer='SGD', loss='categorical_crossentropy')
+    return nn
 
 
 if __name__ == '__main__':
