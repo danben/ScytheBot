@@ -36,6 +36,7 @@ def get_preds_shape(num_workers, head):
 
 @attr.s(slots=True)
 class Env:
+    id = attr.ib()
     boards_shared = attr.ib()
     data_shared = attr.ib()
     preds_shared = attr.ib()
@@ -59,7 +60,7 @@ class Env:
         preds_shared = [shared_memory.SharedMemory(name=get_segment_name(env_id, DataType.PREDS, head), create=True,
                                                    size=preds_dummies[head.value].nbytes)
                         for head in model_const.Head]
-        return cls(boards_shared, data_shared, preds_shared)
+        return cls(env_id, boards_shared, data_shared, preds_shared)
 
 
 @attr.s(slots=True)
@@ -118,7 +119,7 @@ class SharedMemoryManager:
         data_shared = shared_memory.SharedMemory(name=get_segment_name(env_id, DataType.DATA))
         preds_shared = [shared_memory.SharedMemory(name=get_segment_name(env_id, DataType.PREDS, head))
                         for head in model_const.Head]
-        return Env(boards_shared, data_shared, preds_shared)
+        return Env(env_id, boards_shared, data_shared, preds_shared)
 
     @staticmethod
     def get_worker_view(env_id, num_workers, worker_id):
@@ -129,3 +130,10 @@ class SharedMemoryManager:
     def get_evaluator_view(env_id, num_workers):
         env = SharedMemoryManager.make_env(env_id)
         return View.for_evaluator(env, num_workers)
+
+    def unlink(self):
+        for env in self.envs:
+            env.boards_shared.unlink()
+            env.data_shared.unlink()
+            for pred in env.preds_shared:
+                pred.unlink()

@@ -143,8 +143,8 @@ class Node:
 class MCTSZeroAgent(Agent):
     simulations_per_choice = attr.ib()
     c = attr.ib()
-    evaluator_conn = attr.ib(default=None)
-    evaluator_network = attr.ib(default=None)
+    view = attr.ib()
+    evaluator_conn = attr.ib()
     experience_collector = attr.ib(default=None)
 
     def begin_episode(self):
@@ -171,7 +171,7 @@ class MCTSZeroAgent(Agent):
     # Even though [choices] is implied by [game_state], we pass it in here to avoid recomputing it
     # since we needed to compute it in the initial call to [select_move] in order to shortcut in the
     # event that there are 0 or 1 choices.
-    def create_node(self, game_state, choices, move=None, parent=None):
+    async def create_node(self, game_state, choices, move=None, parent=None):
         if game_state.is_over():
             values = {}
             for player in game_state.players_by_idx:
@@ -179,21 +179,25 @@ class MCTSZeroAgent(Agent):
                 values[faction_name] = 1 if faction_name is game_state.winner else 0
             move_priors = {}
         else:
-            # values, move_priors = {faction: np.random.random() for faction in game_state.player_idx_by_faction_name.keys()}, {choice: np.random.random() for choice in choices}
-            if self.evaluator_conn is not None:
-                t = time.time()
-                self.evaluator_conn.send((game_state, choices))
-                values, move_priors = self.evaluator_conn.recv()
-                # print(f'Took {time.time() - t}s to get evaluation results')
-            else:
-                values, move_priors = model.evaluate(self.evaluator_network, [game_state], [choices])
-                values, move_priors = values[0], move_priors[0]
+            t = time.time()
+            # Encode game state and write to shared memory
+            encoded_game_state = gs_enc.encode(game_state)
+            assert self.view.board.shape == encoded_game_state.board.shape
+            self.view.board[:] = encoded_game_state.board
+            encoded_data = encoded_game_state.encoded_data()
+            assert self.view.data.shape == encoded_data.shape
+            self.view.data[:] = encoded_data
+            await self.evaluator_conn.send(0)
+            await self.evaluator_conn.recv()
+            # Read the predictions out of shared memory and convert them to values and move priors
+            values, move_priors = model.to_values_and_move_priors(game_state, choices, self.view.preds)
+            # print(f'Took {time.time() - t}s to get evaluation results')
         new_node = Node.from_state(game_state, values, parent, move, move_priors)
         if parent is not None:
             parent.add_child(move, new_node)
         return new_node
 
-    def select_move(self, game_state):
+    async def select_move(self, game_state):
         if self.experience_collector is None:
             indices_by_faction_name = gs_enc.get_indices_by_faction_name(game_state)
             self.experience_collector = ExperienceCollector(indices_by_faction_name)
@@ -230,7 +234,7 @@ class MCTSZeroAgent(Agent):
                     new_state = play.apply_move(new_state, None) if not legal_moves \
                         else play.apply_move(new_state, legal_moves[0])
                     legal_moves = new_state.legal_moves()
-                node = self.create_node(new_state, legal_moves, move, parent=node)
+                node = await self.create_node(new_state, legal_moves, move, parent=node)
                 values_to_propagate = node.values
 
             if logger.isEnabledFor(logging.DEBUG):

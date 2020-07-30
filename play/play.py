@@ -4,12 +4,12 @@ import game.play as gp
 import game.state_change as sc
 
 
-def play_game(game_state, agents):
+async def play_game(game_state, agents):
     logging.debug('\nNEW GAME\n')
     while not game_state.is_over():
         # logging.debug(f'Board: {game_state.board}')
         agent = agents[game_state.current_player_idx]
-        chosen = agent.select_move(game_state)
+        chosen = await agent.select_move(game_state)
         print(f'Move selected by {sc.get_current_player(game_state)}')
         if logging.getLogger().isEnabledFor(logging.INFO):
             next_action = game_state.action_stack.first

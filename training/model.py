@@ -101,25 +101,30 @@ def map_factions_to_values(game_state, values):
     return {f: values[i] for (f, i) in indices_by_faction_name.items()}
 
 
+def to_values_and_move_priors(game_state, choices, preds):
+    values = map_factions_to_values(game_state, preds[Head.VALUE_HEAD.value])
+    move_priors = decode.get_move_priors(preds, game_state.action_stack.first.__class__, choices)
+    return values, move_priors
+
 # Even though [choices] is implied by [game_state], we pass it in here to avoid recomputing it
 # since we needed to compute it in the initial call to [select_move] in order to shortcut in the
 # event that there are 0 or 1 choices.
-def evaluate(model, game_states, choices):
-    encoded = [gs_enc.encode(game_state) for game_state in game_states]
-    encoded_data = np.array([e.encoded_data() for e in encoded])
-    boards = np.array([e.board for e in encoded])
-    # This will give us a list of [len(game_states)] predictions for each head
-    inverted_preds = model.predict([boards, encoded_data], batch_size=len(game_states), use_multiprocessing=False)
-    # inverted_preds = model([boards, encoded_data], training=False)
-
-    # What we really want is a list of samples, where each sample contains a single prediction for each head
-    preds = []
-    for i in range(len(game_states)):
-        preds.append([inverted_preds[head][i] for head in range(len(Head))])
-    values = [map_factions_to_values(game_states[i], preds[i][Head.VALUE_HEAD.value]) for i in range(len(game_states))]
-    move_priors = [decode.get_move_priors(preds[i], game_states[i].action_stack.first.__class__, choices[i])
-                   for i in range(len(game_states))]
-    return values, move_priors
+# def evaluate(model, game_states, choices):
+#     encoded = [gs_enc.encode(game_state) for game_state in game_states]
+#     encoded_data = np.array([e.encoded_data() for e in encoded])
+#     boards = np.array([e.board for e in encoded])
+#     # This will give us a list of [len(game_states)] predictions for each head
+#     inverted_preds = model.predict([boards, encoded_data], batch_size=len(game_states), use_multiprocessing=False)
+#     # inverted_preds = model([boards, encoded_data], training=False)
+#
+#     # What we really want is a list of samples, where each sample contains a single prediction for each head
+#     preds = []
+#     for i in range(len(game_states)):
+#         preds.append([inverted_preds[head][i] for head in range(len(Head))])
+#     values = [map_factions_to_values(game_states[i], preds[i][Head.VALUE_HEAD.value]) for i in range(len(game_states))]
+#     move_priors = [decode.get_move_priors(preds[i], game_states[i].action_stack.first.__class__, choices[i])
+#                    for i in range(len(game_states))]
+#     return values, move_priors
 
 
 def empty_heads(len):

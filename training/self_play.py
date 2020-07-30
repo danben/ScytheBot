@@ -12,7 +12,7 @@ import training.constants as model_const
 
 from encoders.game_state import EncodedGameState
 from training.learner import Learner
-from training.shared_memory_manager import segment_name, DataType
+from training.shared_memory_manager import get_segment_name, DataType
 
 NUM_PLAYERS = 2
 NUM_WORKERS = 4
@@ -25,7 +25,7 @@ def run_n_times(n, game_state, agents):
         play.play_game(game_state, agents)
 
 
-def evaluator(envs):
+def evaluator(envs, nn):
     # An environment is a group of workers and a single index. Each worker will be simulating multiple
     # games sequentially; it will put game states from game N into environment N.
     from training import model
@@ -34,16 +34,15 @@ def evaluator(envs):
     physical_devices = tf.config.list_physical_devices('GPU')
     tf.config.experimental.set_memory_growth(physical_devices[0], True)
     tf.compat.v1.disable_eager_execution()
-    nn = model.network()
     # Set up shared memory buffers. Each contains all of the memory for one data type in a single environment.
     # Each element of preds will be a list of arrays corresponding to each model head.
     boards, data, preds, shms = [], [], [], []
     num_workers = len(envs[0])
-    for env_id, worker_pipes in envs.items():
+    for env_id in range(len(envs)):
         # Get the batch from shared memory
-        boards_buf = shared_memory.SharedMemory(name=segment_name(env_id, DataType.BOARDS))
+        boards_buf = shared_memory.SharedMemory(name=get_segment_name(env_id, DataType.BOARDS))
         shms.append(boards_buf)
-        data_buf = shared_memory.SharedMemory(name=segment_name(env_id, DataType.DATA))
+        data_buf = shared_memory.SharedMemory(name=get_segment_name(env_id, DataType.DATA))
         shms.append(data_buf)
 
         # Put into the right shapes
@@ -55,14 +54,14 @@ def evaluator(envs):
 
         heads = []
         for head in model_const.Head:
-            head_buf = shared_memory.SharedMemory(name=f'{segment_name(env_id, DataType.PREDS)}-{head.value}')
+            head_buf = shared_memory.SharedMemory(name=f'{get_segment_name(env_id, DataType.PREDS)}-{head.value}')
             shms.append(head_buf)
-            head_shape = (len(worker_pipes), model.head_sizes[head])
+            head_shape = (num_workers, model.head_sizes[head])
             heads.append(np.ndarray(head_shape, buffer=head_buf))
         preds.append(heads)
 
     while True:
-        for env_id, worker_pipes in envs.items():
+        for env_id, worker_pipes in enumerate(envs):
             # Block until every worker has sent in a sample for evaluation in
             # this environment
             for p in worker_pipes:
@@ -70,8 +69,8 @@ def evaluator(envs):
 
             predictions = nn.predict(boards[env_id], data[env_id], batch_size=num_workers)
             for head in model_const.Head:
-                assert preds[head.value].shape == predictions[head.value].shape
-                preds[head.value][:] = predictions[head.value]
+                assert preds[env_id][head.value].shape == predictions[head.value].shape
+                preds[env_id][head.value][:] = predictions[head.value]
 
             # Notify the workers that their predictions are ready
             for p in worker_pipes:
