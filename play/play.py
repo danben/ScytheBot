@@ -10,7 +10,6 @@ async def play_game(game_state, agents):
         # logging.debug(f'Board: {game_state.board}')
         agent = agents[game_state.current_player_idx]
         chosen = await agent.select_move(game_state)
-        print(f'Move selected by {sc.get_current_player(game_state)}')
         if logging.getLogger().isEnabledFor(logging.INFO):
             next_action = game_state.action_stack.first
             logging.info(f'{sc.get_current_player(game_state)} chooses {chosen} for {next_action}')

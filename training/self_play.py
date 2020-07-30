@@ -21,7 +21,7 @@ from training.worker_env_conn import WorkerEnvConn
 NUM_PLAYERS = 2
 NUM_WORKERS = 4
 NUM_ENVS = 2
-SIMULATIONS_PER_CHOICE = 5
+SIMULATIONS_PER_CHOICE = 1
 
 
 def run_n_times(n, game_state, agents):
@@ -44,35 +44,38 @@ def evaluator(num_envs, num_workers, model_base_path):
     boards, data, preds, shms = [], [], [], []
     for env_id in range(num_envs):
         # Get the batch from shared memory
-        boards_buf = shared_memory.SharedMemory(name=get_segment_name(env_id, DataType.BOARDS))
-        shms.append(boards_buf)
-        data_buf = shared_memory.SharedMemory(name=get_segment_name(env_id, DataType.DATA))
-        shms.append(data_buf)
+        boards_shm = shared_memory.SharedMemory(name=get_segment_name(env_id, DataType.BOARDS))
+        shms.append(boards_shm)
+        data_shm = shared_memory.SharedMemory(name=get_segment_name(env_id, DataType.DATA))
+        shms.append(data_shm)
 
         # Put into the right shapes
         boards_shape = (num_workers,) + EncodedGameState.board_shape
-        boards.append(np.ndarray(boards_shape, buffer=boards_buf))
+        boards.append(np.ndarray(boards_shape, buffer=boards_shm.buf))
 
         data_shape = (num_workers,) + EncodedGameState.data_shape
-        data.append(np.ndarray(data_shape, buffer=data_buf))
+        data.append(np.ndarray(data_shape, buffer=data_shm.buf))
 
         heads = []
         for head in model_const.Head:
-            head_buf = shared_memory.SharedMemory(name=f'{get_segment_name(env_id, DataType.PREDS)}-{head.value}')
-            shms.append(head_buf)
+            head_shm = shared_memory.SharedMemory(name=f'{get_segment_name(env_id, DataType.PREDS)}-{head.value}')
+            shms.append(head_shm)
             head_shape = (num_workers, model.head_sizes[head])
-            heads.append(np.ndarray(head_shape, buffer=head_buf))
+            heads.append(np.ndarray(head_shape, buffer=head_shm.buf))
         preds.append(heads)
 
     nn = load_model(model_base_path)
+    print(f'Evaluator got shared memory and loaded model. Starting {num_envs} threads.')
 
-    def env_loop(env_id, worker_env_conns):
+    async def env_loop(env_id, worker_env_conns):
         while True:
             # Block until every worker has sent in a sample for evaluation in
             # this environment
-            asyncio.wait([worker_env_conn.env_get_woken_up() for worker_env_conn in worker_env_conns])
+            # print(f'Evaluator {env_id} waiting for workers')
+            await asyncio.wait([worker_env_conn.env_get_woken_up() for worker_env_conn in worker_env_conns])
 
-            predictions = nn.predict(boards[env_id], data[env_id], batch_size=num_workers)
+            # print(f'Evaluator {env_id} got a batch, making predictions')
+            predictions = nn.predict([boards[env_id], data[env_id]], batch_size=num_workers)
             for head in model_const.Head:
                 assert preds[env_id][head.value].shape == predictions[head.value].shape
                 preds[env_id][head.value][:] = predictions[head.value]
@@ -80,9 +83,11 @@ def evaluator(num_envs, num_workers, model_base_path):
             # Notify the workers that their predictions are ready
             for worker_env_conn in worker_env_conns:
                 worker_env_conn.wake_up_worker()
+            # print(f'Evaluator {env_id} woke up all its workers')
 
-    asyncio.wait([env_loop(env_id, [WorkerEnvConn.for_env(env_id, worker_id) for worker_id in num_workers])
-                  for env_id in range(num_envs)])
+    asyncio.run(asyncio.wait([env_loop(env_id,
+                                       [WorkerEnvConn.for_env(env_id, worker_id) for worker_id in range(num_workers)])
+                              for env_id in range(num_envs)]))
 
 
 def learner(model_base_path, training_queue):

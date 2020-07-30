@@ -5,6 +5,8 @@ import os
 
 @attr.s(slots=True)
 class WorkerEnvConn:
+    env_id = attr.ib()
+    worker_id = attr.ib()
     worker_to_env = attr.ib()
     env_to_worker = attr.ib()
 
@@ -31,7 +33,7 @@ class WorkerEnvConn:
                              'a+b', buffering=0)
         env_to_worker = open(WorkerEnvConn.get_env_to_worker_name(env_id=env_id, worker_id=worker_id),
                              'rb', buffering=0)
-        return cls(worker_to_env, env_to_worker)
+        return cls(env_id, worker_id, worker_to_env, env_to_worker)
 
     @classmethod
     def for_env(cls, env_id, worker_id):
@@ -40,7 +42,7 @@ class WorkerEnvConn:
                              'rb', buffering=0)
         env_to_worker = open(WorkerEnvConn.get_env_to_worker_name(env_id=env_id, worker_id=worker_id),
                              'a+b', buffering=0)
-        return cls(worker_to_env, env_to_worker)
+        return cls(env_id, worker_id, worker_to_env, env_to_worker)
 
     @staticmethod
     def _get_woken_up(fifo):
@@ -49,7 +51,11 @@ class WorkerEnvConn:
 
         # @staticmethod
         def set_determined():
-            future.set_result(fifo.read(1)[0])
+            b = fifo.read(1)
+            if len(b) < 1:
+                print(f'No data to read on {fifo}')
+            else:
+                future.set_result(b[0])
             asyncio.get_event_loop().remove_reader(fifo)
 
         loop.add_reader(fifo, set_determined)
@@ -58,11 +64,11 @@ class WorkerEnvConn:
     def env_get_woken_up(self):
         return WorkerEnvConn._get_woken_up(self.worker_to_env)
 
-    def wake_up_env(self, worker_id):
-        self.worker_to_env.write(bytes([worker_id]))
+    def wake_up_env(self):
+        self.worker_to_env.write(bytes([self.worker_id]))
 
     def worker_get_woken_up(self):
         return WorkerEnvConn._get_woken_up(self.env_to_worker)
 
-    def wake_up_worker(self, env_id):
-        self.env_to_worker.write(bytes([env_id]))
+    def wake_up_worker(self):
+        self.env_to_worker.write(bytes([self.env_id]))

@@ -24,7 +24,6 @@ class ExperienceCollector:
     winner = attr.ib(default=None)
 
     def record_move(self, game_state, move_visits):
-        print(f'Recording a move')
         self.game_states.append(game_state)
         self.move_visits.append(move_visits)
 

@@ -40,7 +40,7 @@ class Simulator:
                 logging.debug(f'Worker {self.worker_id} starting a self-play match in environment {self.env_id}')
             print(f'Worker {self.worker_id} starting a self-play match in environment{self.env_id}')
             start = time.time()
-            await play.play_game(game_state, self.agents)
+            game_state = await play.play_game(game_state, self.agents)
             end = time.time()
             if logging.getLogger().isEnabledFor(logging.DEBUG):
                 logging.debug(f'Worker {self.worker_id} finished a game at {end} ({end - start} seconds)')
@@ -67,7 +67,4 @@ def worker(wid, num_workers, num_envs, learner_queue, num_players, simulations_p
                            simulations_per_choice=simulations_per_choice, learner_queue=learner_queue)
             for i in range(num_envs)]
 
-    for sim in sims:
-        asyncio.create_task(sim.run())
-
-    asyncio.get_event_loop().run_forever()
+    asyncio.run(asyncio.wait([sim.run() for sim in sims]))

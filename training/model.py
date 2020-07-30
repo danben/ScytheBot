@@ -9,6 +9,7 @@ from training import decode, utils
 from training.constants import Head
 
 import numpy as np
+import os
 import time
 
 
@@ -51,7 +52,7 @@ def head(x, num_choices):
 
 
 def network():
-    board_input = Input(gs_enc.BOARD_SHAPE, name="board")
+    board_input = Input(gs_enc.EncodedGameState.board_shape, name="board")
     data_input = Input(gs_enc.EncodedGameState.data_shape, name="data")
 
     board = resnet(board_input, NUM_RESIDUAL_BLOCKS)
