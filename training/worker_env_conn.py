@@ -24,7 +24,11 @@ class WorkerEnvConn:
         env_to_worker_name = WorkerEnvConn.get_env_to_worker_name(env_id=env_id, worker_id=worker_id)
         for fname in [worker_to_env_name, env_to_worker_name]:
             if not os.path.exists(fname):
-                os.mkfifo(fname)
+                try:
+                    print(f'Creating {fname}')
+                    os.mkfifo(fname)
+                except FileExistsError:
+                    print(f'{fname} exists somehow')
 
     @classmethod
     def for_worker(cls, env_id, worker_id):
@@ -51,11 +55,7 @@ class WorkerEnvConn:
 
         # @staticmethod
         def set_determined():
-            b = fifo.read(1)
-            if len(b) < 1:
-                print(f'No data to read on {fifo}')
-            else:
-                future.set_result(b[0])
+            future.set_result(fifo.read(1)[0])
             asyncio.get_event_loop().remove_reader(fifo)
 
         loop.add_reader(fifo, set_determined)
@@ -72,3 +72,7 @@ class WorkerEnvConn:
 
     def wake_up_worker(self):
         self.env_to_worker.write(bytes([self.env_id]))
+
+    def clean_up(self):
+        os.unlink(self.worker_to_env)
+        os.unlink(self.env_to_worker)
