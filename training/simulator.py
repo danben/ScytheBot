@@ -99,8 +99,9 @@ class Simulator:
                 #   so that means either that the current game state has no choices (in which case we apply None
                 #   or the singleton choice) or
                 game_state = self.game_states[i]
+                choices = game_state.legal_moves()
                 agent = self.agents[i][game_state.current_player_idx]
-                result, move = agent.advance_until_predictions_needed_or_move_selected_or_game_over()
+                result, move = agent.advance_until_predictions_needed_or_move_selected_or_game_over(game_state, choices)
                 while result is not MCTSZeroAgentManual.Result.PREDICTIONS_NEEDED:
                     if game_state.is_over():
                         # We finished a self-play episode. Feed the learner and start over.
@@ -111,19 +112,30 @@ class Simulator:
                         for agent in self.agents[i]:
                             agent.begin_episode()
                         agent = self.agents[i][self.game_states[i].current_player_idx]
-                        result, move = agent.advance_until_predictions_needed_or_move_selected_or_game_over(game_state)
+                        result, move =\
+                            agent.advance_until_predictions_needed_or_move_selected_or_game_over(game_state,
+                                                                                            game_state.legal_moves())
                     elif result is MCTSZeroAgentManual.Result.MOVE_SELECTED:
                         # We finished the current simulation. Apply the move and start the next simulation by
                         # updating the game state and current player.
                         game_state = self.game_states[i] = apply_move(game_state, move)
+                        choices = game_state.legal_moves()
+                        while len(choices) < 2:
+                            if len(choices) == 1:
+                                game_state = apply_move(game_state, choices[0])
+                            else:
+                                game_state = apply_move(game_state, None)
+                            choices = game_state.legal_moves()
                         agent = self.agents[i][game_state.current_player_idx]
-                        result, move = agent.advance_until_predictions_needed_or_move_selected_or_game_over(game_state)
+                        result, move = agent.advance_until_predictions_needed_or_move_selected_or_game_over(game_state,
+                                                                                                            choices)
                     else:
                         assert result is MCTSZeroAgentManual.Result.NEXT_ITERATION
                         # We finished an iteration of the current simulation by hitting a terminal state. The
                         # agent should have updated its internal state to set the current node back to the root.
                         # Try again.
-                        result, move = agent.advance_until_predictions_needed_or_move_selected_or_game_over(game_state)
+                        result, move = agent.advance_until_predictions_needed_or_move_selected_or_game_over(game_state,
+                                                                                                            choices)
 
                 agent.send_prediction_request(view)
 
