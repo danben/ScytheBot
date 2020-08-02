@@ -275,6 +275,10 @@ class MCTSZeroAgentManual:
 
     def begin_episode(self):
         self.experience_collector = None
+        self.current_tree_node = None
+        self.current_tree_root = None
+        self.current_simulation = 0
+        self.pending_game_state_and_choices = None
 
     def complete_episode(self, winner):
         self.experience_collector.complete_episode(winner)
@@ -346,6 +350,7 @@ class MCTSZeroAgentManual:
             if logger.isEnabledFor(logging.DEBUG):
                 logger.debug(f'Probability distribution for {legal_moves}: {probas}')
             # Have to do this annoying thing because [legal_moves] might contain tuples
+            self.current_simulation = 0
             return MCTSZeroAgentManual.Result.MOVE_SELECTED, legal_moves[np.random.choice(range(len(legal_moves)), p=probas)]
 
         # Perform the next simulation. Using [select_branch], find a node that's either terminal or needs exploration.

@@ -77,51 +77,60 @@ class Simulator:
                     for i in len(envs)])
 
     def run(self):
-        for i, view in enumerate(self.views):
-            # For each environment, we want to move it forward until we need predictions. That means:
-            # - If there is no current game being played, start one. Create the game state and reset
-            #   the agents. Then we need to kick off the first select_move call, advancing until we need
-            #   predictions. However, it may be the case that the current game state has either 0 or 1 choices
-            #   available. In this case we should apply them until we get to a game state that has multiple
-            #   options available.
-            #
-            #   If we've gotten here, that means we have a move with multiple options available. The first time we'll
-            #   need predictions is when we create the root node, so we can go ahead and do that. Now we're in the
-            #   WAITING_ON_ROOT state.
-            #
-            # - If there is a current game, we must be inside of a select_move call. We don't need predictions,
-            #   so that means either that the current game state has no choices (in which case we apply None
-            #   or the singleton choice) or
-            game_state = self.game_states[i]
-            if game_state is None:
-                game_state = self.game_states[i] = GameState.from_num_players(self.num_players_per_game)
-                for agent in self.agents[i]:
-                    agent.begin_episode()
+        for i in len(self.game_states):
+            self.game_states[i] = GameState.from_num_players(self.num_players_per_game)
+            for agent in self.agents[i]:
+                agent.begin_episode()
 
-            agent = self.agents[i][game_state.current_player_idx]
-            result, move = agent.advance_until_predictions_needed_or_move_selected_or_game_over()
-            while result is not MCTSZeroAgentManual.Result.PREDICTIONS_NEEDED:
-                if game_state.is_over():
-                    for agent in self.agents[i]:
-                        agent.complete_episode(game_state.winner)
-                    # This is where we would feed stuff to the learner
-                    self.game_states[i] = GameState.from_num_players(self.num_players_per_game)
-                    for agent in self.agents[i]:
-                        agent.begin_episode()
-                elif result is MCTSZeroAgentManual.Result.MOVE_SELECTED:
-                    game_state = self.game_states[i] = apply_move(game_state, move)
-                    agent = self.agents[i][game_state.current_player_idx]
-                    result, move = agent.advance_until_predictions_needed_or_move_selected_or_game_over()
-                else:
+        while True:
+            for i, view in enumerate(self.views):
+                # For each environment, we want to move it forward until we need predictions. That means:
+                # - If there is no current game being played, start one. Create the game state and reset
+                #   the agents. Then we need to kick off the first select_move call, advancing until we need
+                #   predictions. However, it may be the case that the current game state has either 0 or 1 choices
+                #   available. In this case we should apply them until we get to a game state that has multiple
+                #   options available.
+                #
+                # - If we've gotten here, that means we have a move with multiple options available. The first time we'll
+                #   need predictions is when we create the root node, so we can go ahead and do that. Now we're in the
+                #   WAITING_ON_ROOT state.
+                #
+                # - If there is a current game, we must be inside of a select_move call. We don't need predictions,
+                #   so that means either that the current game state has no choices (in which case we apply None
+                #   or the singleton choice) or
+                game_state = self.game_states[i]
+                agent = self.agents[i][game_state.current_player_idx]
+                result, move = agent.advance_until_predictions_needed_or_move_selected_or_game_over()
+                while result is not MCTSZeroAgentManual.Result.PREDICTIONS_NEEDED:
+                    if game_state.is_over():
+                        # We finished a self-play episode. Feed the learner and start over.
+                        for agent in self.agents[i]:
+                            agent.complete_episode(game_state.winner)
+                        # This is where we would feed stuff to the learner
+                        game_state = self.game_states[i] = GameState.from_num_players(self.num_players_per_game)
+                        for agent in self.agents[i]:
+                            agent.begin_episode()
+                        agent = self.agents[i][self.game_states[i].current_player_idx]
+                        result, move = agent.advance_until_predictions_needed_or_move_selected_or_game_over(game_state)
+                    elif result is MCTSZeroAgentManual.Result.MOVE_SELECTED:
+                        # We finished the current simulation. Apply the move and start the next simulation by
+                        # updating the game state and current player.
+                        game_state = self.game_states[i] = apply_move(game_state, move)
+                        agent = self.agents[i][game_state.current_player_idx]
+                        result, move = agent.advance_until_predictions_needed_or_move_selected_or_game_over(game_state)
+                    else:
+                        assert result is MCTSZeroAgentManual.Result.NEXT_ITERATION
+                        # We finished an iteration of the current simulation by hitting a terminal state. The
+                        # agent should have updated its internal state to set the current node back to the root.
+                        # Try again.
+                        result, move = agent.advance_until_predictions_needed_or_move_selected_or_game_over(game_state)
 
+                agent.send_prediction_request(view)
 
-
-            agent.send_prediction_request(view)
-
-        for i, view in enumerate(self.views):
-            game_state = self.game_states[i]
-            agent = self.agents[i][game_state.current_player_idx]
-            agent.decode_predictions_and_apply_move(view)
+            for i, view in enumerate(self.views):
+                game_state = self.game_states[i]
+                agent = self.agents[i][game_state.current_player_idx]
+                agent.decode_predictions_and_propagate_values(view)
 
 
 def async_worker(wid, num_workers, num_envs, learner_queue, num_players, simulations_per_choice):
