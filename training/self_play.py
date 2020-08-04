@@ -1,25 +1,12 @@
-import asyncio
-import cProfile
 import logging
 import multiprocessing as mp
 import os
-import signal
-import time
-import uvloop
-
-import numpy as np
 import tensorflow as tf
 
-from multiprocessing import shared_memory
 
-import training.constants as model_const
-
-from encoders.game_state import EncodedGameState
 from training.learner import Learner
-from training.model import load as load_model
-from training.shared_memory_manager import get_segment_name, DataType, SharedMemoryManager
-from training.simulator import profile_worker, worker
-from training.worker_env_conn import WorkerEnvConn
+from training.shared_memory_manager import SharedMemoryManager
+from training.simulator import profile_async_worker, async_worker
 
 NUM_PLAYERS = 2
 NUM_WORKERS = 4
@@ -31,81 +18,6 @@ def run_n_times(n, game_state, agents):
     from play import play
     for _ in range(n):
         play.play_game(game_state, agents)
-
-
-def evaluator(num_envs, num_workers, model_base_path):
-    # os.nice(-20)
-    param = os.sched_param(os.sched_get_priority_max(os.SCHED_FIFO))
-    os.sched_setscheduler(0, os.SCHED_FIFO, param)
-    # An environment is a group of workers and a single index. Each worker will be simulating multiple
-    # games sequentially; it will put game states from game N into environment N.
-    from training import model
-    import tensorflow as tf
-    # import time
-    physical_devices = tf.config.list_physical_devices('GPU')
-    tf.config.experimental.set_memory_growth(physical_devices[0], True)
-    tf.compat.v1.disable_eager_execution()
-    # Set up shared memory buffers. Each contains all of the memory for one data type in a single environment.
-    # Each element of preds will be a list of arrays corresponding to each model head.
-    boards, data, preds, shms = [], [], [], []
-    for env_id in range(num_envs):
-        # Get the batch from shared memory
-        boards_shm = shared_memory.SharedMemory(name=get_segment_name(env_id, DataType.BOARDS))
-        shms.append(boards_shm)
-        data_shm = shared_memory.SharedMemory(name=get_segment_name(env_id, DataType.DATA))
-        shms.append(data_shm)
-
-        # Put into the right shapes
-        boards_shape = (num_workers,) + EncodedGameState.board_shape
-        boards.append(np.ndarray(boards_shape, buffer=boards_shm.buf))
-
-        data_shape = (num_workers,) + EncodedGameState.data_shape
-        data.append(np.ndarray(data_shape, buffer=data_shm.buf))
-
-        heads = []
-        for head in model_const.Head:
-            head_shm = shared_memory.SharedMemory(name=f'{get_segment_name(env_id, DataType.PREDS)}-{head.value}')
-            shms.append(head_shm)
-            head_shape = (num_workers, model.head_sizes[head])
-            heads.append(np.ndarray(head_shape, buffer=head_shm.buf))
-        preds.append(heads)
-
-    nn = load_model(model_base_path)
-    print(f'Evaluator got shared memory and loaded model. Starting {num_envs} threads.')
-
-    async def env_loop(env_id, worker_env_conns):
-        while True:
-            # Block until every worker has sent in a sample for evaluation in
-            # this environment
-            # print(f'Evaluator {env_id} waiting for workers')
-            await asyncio.wait([worker_env_conn.env_get_woken_up() for worker_env_conn in worker_env_conns])
-
-            # print(f'Evaluator {env_id} got a batch, making predictions')
-            predictions = nn.predict([boards[env_id], data[env_id]], batch_size=num_workers)
-            for head in model_const.Head:
-                assert preds[env_id][head.value].shape == predictions[head.value].shape
-                preds[env_id][head.value][:] = predictions[head.value]
-
-            # Notify the workers that their predictions are ready
-            for worker_env_conn in worker_env_conns:
-                worker_env_conn.wake_up_worker()
-            # print(f'Evaluator {env_id} woke up all its workers')
-
-    uvloop.install()
-    worker_env_conns = [[WorkerEnvConn.for_env(env_id, worker_id) for worker_id in range(num_workers)]
-                        for env_id in range(num_envs)]
-
-    # def on_kill(_signum, _stack_frame):
-    #     for l in worker_env_conns:
-    #         for worker_env_conn in l:
-    #             worker_env_conn.clean_up()
-    #
-    # signal.signal(signal.SIGKILL, on_kill)
-    asyncio.run(asyncio.wait([env_loop(env_id, worker_env_conns[env_id]) for env_id in range(num_envs)]))
-
-
-def profile_evaluator(num_envs, num_workers, model_base_path):
-    cProfile.runctx('evaluator(num_envs, num_workers, model_base_path)', globals(), locals(), sort='cumtime')
 
 
 def learner(model_base_path, training_queue):
@@ -122,7 +34,7 @@ if __name__ == '__main__':
     smm = SharedMemoryManager.init(NUM_WORKERS, NUM_ENVS)
     try:
         for id in range(NUM_WORKERS):
-            p = mp.Process(target=profile_worker, args=(id, NUM_WORKERS, NUM_ENVS, learner_queue, NUM_PLAYERS,
+            p = mp.Process(target=profile_async_worker, args=(id, NUM_WORKERS, NUM_ENVS, learner_queue, NUM_PLAYERS,
                                                         SIMULATIONS_PER_CHOICE))
             workers.append(p)
             p.start()

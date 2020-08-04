@@ -66,11 +66,11 @@ class ExperienceCollector:
         for i, game_state in enumerate(self.game_states):
             top_action_class = game_state.action_stack.first.__class__
             if top_action_class is MoveOnePiece:
+            # If the action is [MoveOnePiece], we can't just use a decoder as normal. We need to compute probabilities
+            # for both board space and piece type from the available choices.
                 ExperienceCollector._assign_move_probs__move_one_piece(values_and_move_probs, i, self.move_visits[i])
             else:
                 ExperienceCollector._assign_move_probs(values_and_move_probs, i, top_action_class, self.move_visits[i])
-            # If the action is [MoveOnePiece], we can't just use a decoder as normal. We need to compute probabilities
-            # for both board space and piece type from the available choices.
 
         return encoded_boards, encoded_data, values_and_move_probs
 
@@ -145,13 +145,15 @@ class MCTSZeroAgent(Agent):
     c = attr.ib()
     view = attr.ib()
     worker_env_conn = attr.ib()
-    experience_collector = attr.ib(default=None)
+    experience_collectors = attr.ib(factory=dict)
 
-    def begin_episode(self):
-        self.experience_collector = None
+    def begin_episode(self, factions):
+        for faction in factions:
+            self.experience_collectors[faction] = None
 
     def complete_episode(self, winner):
-        self.experience_collector.complete_episode(winner)
+        for experience_collector in self.experience_collectors.values():
+            experience_collector.complete_episode(winner)
 
     def select_branch(self, node):
         total_n = node.total_visit_count
@@ -198,9 +200,10 @@ class MCTSZeroAgent(Agent):
         return new_node
 
     async def select_move_async(self, game_state):
-        if self.experience_collector is None:
+        faction_name = sc.get_current_player(game_state).faction_name()
+        if self.experience_collectors[faction_name] is None:
             indices_by_faction_name = gs_enc.get_indices_by_faction_name(game_state)
-            self.experience_collector = ExperienceCollector(indices_by_faction_name)
+            self.experience_collectors[faction_name] = ExperienceCollector(indices_by_faction_name)
 
         choices = game_state.legal_moves()
         if not choices:
@@ -252,13 +255,29 @@ class MCTSZeroAgent(Agent):
         legal_moves = root.moves()
         move_visits = {move: root.visit_count(move) for move in legal_moves}
         assert len(legal_moves) == len(move_visits)
-        self.experience_collector.record_move(game_state, move_visits)
+        self.experience_collectors[faction_name].record_move(game_state, move_visits)
         total_moves = sum(move_visits.values())
         probas = [mv / total_moves for mv in move_visits.values()]
         if logger.isEnabledFor(logging.DEBUG):
             logger.debug(f'Probability distribution for {legal_moves}: {probas}')
         # Have to do this annoying thing because [legal_moves] might contain tuples
         return legal_moves[np.random.choice(range(len(legal_moves)), p=probas)]
+
+
+def propagate_values(node, first_move, values_to_propagate):
+    # Walking up the tree, we need to add to the value of each node. Take the value from [values_to_propagate]
+    # corresponding to the node's current player and pass that to [record_visit].
+    if logger.isEnabledFor(logging.DEBUG):
+        logger.debug(f'Propagating values {values_to_propagate}')
+    move = first_move
+    while node.parent is not None:
+        faction_name = sc.get_current_player(node.parent.game_state).faction_name()
+        value = values_to_propagate[faction_name]
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug(f'Recording a value of {value} for player {faction_name}')
+        node.parent.record_visit(move, value)
+        move = node.parent.last_move
+        node = node.parent
 
 
 @attr.s(slots=True)
@@ -269,19 +288,21 @@ class MCTSZeroAgentManual:
     current_tree_root = attr.ib(default=None)
     current_tree_node = attr.ib(default=None)
     current_simulation = attr.ib(default=0)
-    experience_collector = attr.ib(default=None)
+    experience_collectors = attr.ib(factory=dict)
     old_logging_level = attr.ib(default=None)
-    pending_game_state_and_choices = attr.ib(default=None)
+    pending_game_state_and_choices_and_move = attr.ib(default=None)
 
-    def begin_episode(self):
-        self.experience_collector = None
+    def begin_episode(self, faction_names):
+        for faction_name in faction_names:
+            self.experience_collectors[faction_name] = None
         self.current_tree_node = None
         self.current_tree_root = None
         self.current_simulation = 0
-        self.pending_game_state_and_choices = None
+        self.pending_game_state_and_choices_and_move = None
 
     def complete_episode(self, winner):
-        self.experience_collector.complete_episode(winner)
+        for experience_collector in self.experience_collectors.values():
+            experience_collector.complete_episode(winner)
 
     def select_branch(self, node):
         total_n = node.total_visit_count
@@ -305,22 +326,27 @@ class MCTSZeroAgentManual:
         NEXT_SIMULATION = 3
 
     def send_predictions_to_evaluator(self, game_state):
+        logger.debug('Sending predictions to evaluator')
         encoded_game_state = gs_enc.encode(game_state)
-        assert self.view.board.shape == encoded_game_state.board.shape
-        self.view.board[:] = encoded_game_state.board
-        self.view.board_dirty = 1
+        self.view.write_board(encoded_game_state.board)
         encoded_data = encoded_game_state.encoded_data()
-        assert self.view.data.shape == encoded_data.shape
-        self.view.data[:] = encoded_data
-        self.view.data_dirty = 1
+        self.view.write_data(encoded_data)
 
     def advance_until_predictions_needed_or_move_selected_or_game_over(self, root_game_state, root_choices):
-        # [root_game_state] and [root_choices] refer to the state for which we're trying to select a move
+        print('In advance_until_predictions_needed')
+        # [root_game_state] and [root_choices] refer to the state for which we're trying to select a move. When
+        # this function is called, we're somewhere in the middle of a MCTS simulation. We could be just starting,
+        # in which case we'd need to create a root node, or we could be starting a new iteration (then the current
+        # tree node would also be the root node), or we could be in the middle of an iteration.
 
-        if self.experience_collector is None:
-            # This is the first move of the game made by this player
+        faction_name = sc.get_current_player(root_game_state).faction_name()
+        if self.experience_collectors[faction_name] is None:
+            # This is the first move of the game made by this player. We need to assign an experience collector and
+            # also create a root node. To create the root node we'll need to send the current game state over
+            # to the evaluator and wait for predictions back. Once we have them we can create the node, without
+            # doing the value propagation that we would normally do when creating a node.
             indices_by_faction_name = gs_enc.get_indices_by_faction_name(root_game_state)
-            self.experience_collector = ExperienceCollector(indices_by_faction_name)
+            self.experience_collectors[faction_name] = ExperienceCollector(indices_by_faction_name)
 
             # We need to create the root of the tree. We'll need predictions just to do that, so we
             # can stop there.
@@ -330,25 +356,22 @@ class MCTSZeroAgentManual:
             self.old_logging_level = logging.getLogger().level
             logging.getLogger().setLevel(logging.ERROR)
 
-            self.current_tree_root = self.current_tree_node = root_game_state
-
             if root_game_state.is_over():
                 return MCTSZeroAgentManual.Result.GAME_OVER, None
 
             # Save these for the decoding step
-            self.pending_game_state_and_choices = root_game_state, root_choices
+            self.pending_game_state_and_choices_and_move = root_game_state, root_choices, None
             self.send_predictions_to_evaluator(root_game_state)
             return MCTSZeroAgentManual.Result.PREDICTIONS_NEEDED, None
 
-        assert root_game_state is self.current_tree_root
-
         if self.current_simulation == self.simulations_per_choice:
-            # We've done all of the simulating that we need to and can select a move
+            # We've done all of the simulating that we need to and can select a move in the normal way: get
+            # the probability distribution from the visits of each of the children of the root. At this point
+            # we can also reinstall the initial logging level.
             logging.getLogger().setLevel(self.old_logging_level)
             legal_moves = self.current_tree_root.moves()
             move_visits = {move: self.current_tree_root.visit_count(move) for move in legal_moves}
-            assert len(legal_moves) == len(move_visits)
-            self.experience_collector.record_move(root_game_state, move_visits)
+            self.experience_collectors[faction_name].record_move(root_game_state, move_visits)
             total_moves = sum(move_visits.values())
             probas = [mv / total_moves for mv in move_visits.values()]
             if logger.isEnabledFor(logging.DEBUG):
@@ -362,7 +385,9 @@ class MCTSZeroAgentManual:
         self.current_simulation += 1
 
         while self.current_tree_node.moves():
-            # We know this has to run at least once, because of the above.
+            # We know this has to run at least once, because we don't put any nodes in the tree unless they have
+            # at least two move choices.
+            assert len(self.current_tree_node.moves()) > 1
             if logger.isEnabledFor(logging.DEBUG):
                 logger.debug(f'Selecting a branch for {self.current_tree_node.game_state.action_stack.first.__class__}')
             move = self.select_branch(self.current_tree_node)
@@ -381,41 +406,30 @@ class MCTSZeroAgentManual:
                 new_state = play.apply_move(new_state, None) if not legal_moves \
                     else play.apply_move(new_state, legal_moves[0])
                 legal_moves = new_state.legal_moves()
-            self.pending_game_state_and_choices = new_state, legal_moves
+            self.pending_game_state_and_choices_and_move = new_state, legal_moves, move
             self.send_predictions_to_evaluator(new_state)
         else:
-            # Just do propagation and move to the next simulation
+            # We are at a terminal state, so just do propagation and move to the next simulation. There are
+            # fancier things we can do later to prevent this state from being reached again.
             values_to_propagate = {faction_name: 1 if faction_name is self.current_tree_node.game_state.winner else 0
                                    for faction_name in self.current_tree_node.game_state.player_idx_by_faction_name.keys()}
             propagate_values(self.current_tree_node, move, values_to_propagate)
             self.current_tree_node = self.current_tree_root
             return MCTSZeroAgentManual.Result.NEXT_SIMULATION
 
-    def decode_predictions_and_apply_move(self, env):
-        if self.pending_game_state_and_choices is not None:
-            game_state, choices = self.pending_game_state_and_choices
-            values, move_priors = model.to_values_and_move_priors(game_state, choices, self.view.preds)
-            self.view.preds.dirty = 0
-            self.current_tree_node = Node.from_state(game_state, values, parent=self.current_tree_node, move=None,
-                                                     move_priors=move_priors)
-            if self.current_tree_root is None:
-                self.current_tree_root = self.current_tree_node
-            self.pending_game_state_and_choices = None
+    def decode_predictions_and_propagate_values(self):
+        # We've got some predictions, which means we can create a new node (maybe the root)
+        # and propagate values up the tree (if this is not the root). Once we do that, we're ready
+        # to start the next simulation, so reset the current tree node to the root.
+        assert self.pending_game_state_and_choices_and_move is not None
+        game_state, choices, move = self.pending_game_state_and_choices_and_move
+        values, move_priors = model.to_values_and_move_priors(game_state, choices, self.view.preds)
+        self.view.write_preds_clean()
+        self.current_tree_node = Node.from_state(game_state, values, parent=self.current_tree_node, last_move=move,
+                                                 priors=move_priors)
+        if self.current_tree_root is None:
+            self.current_tree_root = self.current_tree_node
         else:
-
-            node = Node.from_state(new_state, values, parent=node, last_move=move, move_priors=move_priors)
-            values_to_propagate = node.values
-
-
-def propagate_values(node, first_move, values_to_propagate):
-        if logger.isEnabledFor(logging.DEBUG):
-            logger.debug(f'Propagating values {values_to_propagate}')
-        move = first_move
-        while node.parent is not None:
-            faction_name = sc.get_current_player(node.parent.game_state).faction_name()
-            value = values_to_propagate[faction_name]
-            if logger.isEnabledFor(logging.DEBUG):
-                logger.debug(f'Recording a value of {value} for player {faction_name}')
-            node.parent.record_visit(move, value)
-            move = node.parent.last_move
-            node = node.parent
+            propagate_values(self.current_tree_node, move, values)
+        self.pending_game_state_and_choices_and_move = None
+        self.current_tree_node = self.current_tree_root
