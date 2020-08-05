@@ -108,12 +108,7 @@ class View:
 
     def write_board(self, board):
         assert board.shape == self.board.shape
-        try:
-            assert self.dirty[DataType.BOARDS.value] == 0
-        except AssertionError:
-            print(f'Dirty: {self.dirty[DataType.BOARDS.value]}')
-            assert False
-        print('Wrote a board for a prediction')
+        assert self.dirty[DataType.BOARDS.value] == 0
         self.board[:] = board
         self.dirty[DataType.BOARDS.value] = 1
 
@@ -126,12 +121,14 @@ class View:
     def write_preds(self, preds, num_workers):
         for i in range(num_workers):
             assert self.dirty[i, DataType.PREDS.value] == 0
-            self.dirty[i, DataType.PREDS.value] = 1
 
         for head in model_const.Head:
             v = head.value
             assert preds[v].shape == self.preds[v].shape
             self.preds[v][:] = preds[v]
+
+        for i in range(num_workers):
+            self.dirty[i, DataType.PREDS.value] = 1
 
     def wait_for_boards(self, num_workers):
         for i in range(num_workers):

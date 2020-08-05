@@ -321,7 +321,7 @@ class Board:
                 assert False
 
     def get_space(self, coords):
-        assert coords
+        assert coords and len(coords) == 2
         return self.board_spaces_by_coords[coords]
 
     def set_space(self, space):

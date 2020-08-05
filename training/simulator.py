@@ -69,25 +69,30 @@ class Simulator:
 
     @classmethod
     def init(cls, worker_id, num_players, num_workers, envs, simulations_per_choice, c, num_games=None):
-        print('Initializing simulator')
         views = [shared_memory_manager.View.for_worker(env, num_workers, worker_id) for env in envs]
         return cls(worker_id, num_players, views, [None] * len(envs),
                    [MCTSZeroAgentManual(c=c, simulations_per_choice=simulations_per_choice, view=views[i])
                     for i in range(len(envs))], num_games)
 
     def run(self):
-        print('Running simulator')
         for i in range(len(self.game_states)):
-            print(f'Starting a new game in env {i}')
             game_state = GameState.from_num_players(self.num_players_per_game)
             self.game_states[i] = game_state
             self.agents[i].begin_episode(game_state.player_idx_by_faction_name.keys())
 
         last_game = self.num_games if self.num_games else -1
         this_game = 0
+
+        def handle_terminal_state(agent, game_state):
+            # We finished a self-play episode. Feed the learner and start over.
+            agent.complete_episode(game_state.winner)
+            # This is where we would feed stuff to the learner
+            game_state = self.game_states[i] = GameState.from_num_players(self.num_players_per_game)
+            agent.begin_episode(game_state.player_idx_by_faction_name.keys())
+            agent.advance_until_predictions_needed_or_move_selected_or_game_over(game_state,
+                                                                                 game_state.legal_moves())
         while this_game != last_game:
             for i, view in enumerate(self.views):
-                print(f'Iterating env {i}')
                 # For each environment, we want to move it forward until we need predictions. That means:
                 # - If there is no current game being played, start one. Create the game state and reset
                 #   the agents. Then we need to kick off the first select_move call, advancing until we need
@@ -109,29 +114,32 @@ class Simulator:
                 while result is not MCTSZeroAgentManual.Result.PREDICTIONS_NEEDED:
                     if game_state.is_over():
                         this_game += 1
-                        # We finished a self-play episode. Feed the learner and start over.
-                        agent.complete_episode(game_state.winner)
-                        # This is where we would feed stuff to the learner
-                        game_state = self.game_states[i] = GameState.from_num_players(self.num_players_per_game)
-                        agent.begin_episode()
-                        agent.advance_until_predictions_needed_or_move_selected_or_game_over(game_state,
-                                                                                             game_state.legal_moves())
+                        handle_terminal_state(agent, game_state)
                     elif result is MCTSZeroAgentManual.Result.MOVE_SELECTED:
                         # We finished the current simulation. Apply the move and start the next simulation by
                         # updating the game state and current player.
                         game_state = apply_move(game_state, move)
-                        choices = game_state.legal_moves()
-                        while len(choices) < 2:
-                            if len(choices) == 1:
-                                game_state = apply_move(game_state, choices[0])
-                            else:
-                                game_state = apply_move(game_state, None)
+                        if game_state.is_over():
+                            this_game += 1
+                            handle_terminal_state(agent, game_state)
+                        else:
                             choices = game_state.legal_moves()
-                        self.game_states[i] = game_state
-                        result, move = agent.advance_until_predictions_needed_or_move_selected_or_game_over(game_state,
-                                                                                                            choices)
+                            while (not game_state.is_over()) and ((not choices) or len(choices) == 1):
+                                if not choices:
+                                    game_state = apply_move(game_state, None)
+                                else:
+                                    game_state = apply_move(game_state, choices[0])
+                                choices = game_state.legal_moves()
+                            if game_state.is_over():
+                                this_game += 1
+                                handle_terminal_state(agent, game_state)
+                            else:
+                                assert len(choices) > 1
+                                self.game_states[i] = game_state
+                                result, move = agent.advance_until_predictions_needed_or_move_selected_or_game_over(game_state,
+                                                                                                                    choices)
                     else:
-                        assert result is MCTSZeroAgentManual.Result.NEXT_ITERATION
+                        assert result is MCTSZeroAgentManual.Result.NEXT_SIMULATION
                         # We finished an iteration of the current simulation by hitting a terminal state. The
                         # agent should have updated its internal state to set the current node back to the root.
                         # Try again.
@@ -175,9 +183,7 @@ def profile_async_worker(wid, num_workers, num_envs, learner_queue, num_players,
 
 
 def manual_worker(worker_id, num_players, num_workers, num_envs, simulations_per_choice, c, num_iterations=None):
-    print('Starting a manual worker')
     envs = [shared_memory_manager.SharedMemoryManager.make_env(env_id) for env_id in range(num_envs)]
-    print('Envs created')
     sim = Simulator.init(worker_id, num_players, num_workers, envs, simulations_per_choice, c, num_iterations)
     sim.run()
 
@@ -190,13 +196,11 @@ def profile_manual_worker(wid, num_players, num_workers, num_envs, simulations_p
 if __name__ == '__main__':
     import multiprocessing as mp
     from training import evaluator
-    logging.getLogger().setLevel(logging.DEBUG)
+    # logging.getLogger().setLevel(logging.DEBUG)
     model_base_path = 'C:\\Users\\dan\\PycharmProjects\\ScytheBot\\training\\data'
     num_envs = 1
     num_workers = 1
     smm = shared_memory_manager.SharedMemoryManager.init(num_workers, num_envs)
-    print('Starting the evaluator process')
     mp.Process(target=evaluator.evaluator, args=(num_envs, num_workers, model_base_path, True)).start()
-    print('About to start a manual worker')
     manual_worker(0, 2, 1, 1, 10, 1, num_iterations=1)
     smm.unlink()
