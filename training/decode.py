@@ -119,4 +119,10 @@ def get_move_priors(preds, top_action_class, choices):
     else:
         head = preds[model_head_by_action_class[top_action_class].value]
         decoder = decoders[top_action_class]
-        return {choice: head[decoder(choice)] for choice in choices}
+        try:
+            return {choice: head[decoder(choice)] for choice in choices}
+        except IndexError:
+            print(f'IndexError from {top_action_class}')
+            for choice in choices:
+                print(f'Choice: {choice}; Decoded: {decoder(choice)}')
+            assert False

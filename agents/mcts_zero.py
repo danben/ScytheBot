@@ -127,11 +127,6 @@ class Node:
         return self.branches[move].visit_count
 
     def record_visit(self, move, value):
-        # TODO: Remove this
-        if move not in self.branches.keys():
-            print(f'Unknown move {move} for {self.game_state.action_stack.first.__class__}')
-            print(f'Legal moves are {self.branches.keys()}')
-            assert False
         self.total_visit_count += 1
         self.branches[move].visit_count += 1
         self.branches[move].total_value += value
@@ -158,7 +153,6 @@ class MCTSZeroAgent(Agent):
     experience_collectors = attr.ib(factory=dict)
 
     def begin_episode(self, factions):
-        print('Calling begin_episode')
         for faction in factions:
             self.experience_collectors[faction] = None
 
@@ -286,6 +280,7 @@ class MCTSZeroAgentManual:
     experience_collectors = attr.ib(factory=dict)
     old_logging_level = attr.ib(default=None)
     pending_game_state_and_choices_and_move = attr.ib(default=None)
+    timestamp = attr.ib(default=None)
 
     def begin_episode(self, faction_names):
         self.experience_collectors = {faction_name: None for faction_name in faction_names}
@@ -293,8 +288,10 @@ class MCTSZeroAgentManual:
         self.current_tree_root = None
         self.current_simulation = 0
         self.pending_game_state_and_choices_and_move = None
+        self.timestamp = time.time()
 
     def complete_episode(self, winner):
+        print(f'Finished an episode in {time.time() - self.timestamp}s')
         for experience_collector in self.experience_collectors.values():
             experience_collector.complete_episode(winner)
 
@@ -343,7 +340,6 @@ class MCTSZeroAgentManual:
             # doing the value propagation that we would normally do when creating a node.
             indices_by_faction_name = gs_enc.get_indices_by_faction_name(root_game_state)
             self.experience_collectors[faction_name] = ExperienceCollector(indices_by_faction_name)
-            print(f'Installing experience collector for {faction_name}')
 
         # [root_game_state] and [root_choices] refer to the state for which we're trying to select a move. When
         # this function is called, we're somewhere in the middle of a MCTS simulation. We could be just starting,

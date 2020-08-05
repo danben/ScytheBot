@@ -86,11 +86,12 @@ class Simulator:
         def handle_terminal_state(agent, game_state):
             # We finished a self-play episode. Feed the learner and start over.
             agent.complete_episode(game_state.winner)
+            print(f'If there were a learner, we would send {sum([len(e.game_states) for e in agent.experience_collectors.values()])} samples')
             # This is where we would feed stuff to the learner
             game_state = self.game_states[i] = GameState.from_num_players(self.num_players_per_game)
             agent.begin_episode(game_state.player_idx_by_faction_name.keys())
-            agent.advance_until_predictions_needed_or_move_selected_or_game_over(game_state,
-                                                                                 game_state.legal_moves())
+            return MCTSZeroAgentManual.Result.NEXT_SIMULATION, None
+
         while this_game != last_game:
             for i, view in enumerate(self.views):
                 # For each environment, we want to move it forward until we need predictions. That means:
@@ -111,17 +112,20 @@ class Simulator:
                 choices = game_state.legal_moves()
                 agent = self.agents[i]
                 result, move = agent.advance_until_predictions_needed_or_move_selected_or_game_over(game_state, choices)
-                while result is not MCTSZeroAgentManual.Result.PREDICTIONS_NEEDED:
+                while result is not MCTSZeroAgentManual.Result.PREDICTIONS_NEEDED and this_game != last_game:
+                    game_state = self.game_states[i]
                     if game_state.is_over():
-                        this_game += 1
-                        handle_terminal_state(agent, game_state)
+                        if i == len(self.views) - 1:
+                            this_game += 1
+                        result, move = handle_terminal_state(agent, game_state)
                     elif result is MCTSZeroAgentManual.Result.MOVE_SELECTED:
                         # We finished the current simulation. Apply the move and start the next simulation by
                         # updating the game state and current player.
                         game_state = apply_move(game_state, move)
                         if game_state.is_over():
-                            this_game += 1
-                            handle_terminal_state(agent, game_state)
+                            if i == len(self.views) - 1:
+                                this_game += 1
+                            result, move = handle_terminal_state(agent, game_state)
                         else:
                             choices = game_state.legal_moves()
                             while (not game_state.is_over()) and ((not choices) or len(choices) == 1):
@@ -131,8 +135,9 @@ class Simulator:
                                     game_state = apply_move(game_state, choices[0])
                                 choices = game_state.legal_moves()
                             if game_state.is_over():
-                                this_game += 1
-                                handle_terminal_state(agent, game_state)
+                                if i == len(self.views) - 1:
+                                    this_game += 1
+                                result, move = handle_terminal_state(agent, game_state)
                             else:
                                 assert len(choices) > 1
                                 self.game_states[i] = game_state
@@ -146,8 +151,9 @@ class Simulator:
                         result, move = agent.advance_until_predictions_needed_or_move_selected_or_game_over(game_state,
                                                                                                             choices)
 
-            for i, view in enumerate(self.views):
-                self.agents[i].decode_predictions_and_propagate_values()
+            if this_game != last_game:
+                for i, view in enumerate(self.views):
+                    self.agents[i].decode_predictions_and_propagate_values()
 
 
 def async_worker(wid, num_workers, num_envs, learner_queue, num_players, simulations_per_choice):
@@ -202,5 +208,5 @@ if __name__ == '__main__':
     num_workers = 1
     smm = shared_memory_manager.SharedMemoryManager.init(num_workers, num_envs)
     mp.Process(target=evaluator.evaluator, args=(num_envs, num_workers, model_base_path, True)).start()
-    manual_worker(0, 2, 1, 1, 10, 1, num_iterations=1)
+    manual_worker(worker_id=0, num_players=2, num_workers=1, num_envs=1, simulations_per_choice=10, c=1, num_iterations=3)
     smm.unlink()
