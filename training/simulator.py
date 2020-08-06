@@ -114,6 +114,7 @@ class Simulator:
                 result, move = agent.advance_until_predictions_needed_or_move_selected_or_game_over(game_state, choices)
                 while result is not MCTSZeroAgentManual.Result.PREDICTIONS_NEEDED and this_game != last_game:
                     game_state = self.game_states[i]
+                    choices = game_state.legal_moves()
                     if game_state.is_over():
                         if i == len(self.views) - 1:
                             this_game += 1
@@ -185,18 +186,21 @@ def async_worker(wid, num_workers, num_envs, learner_queue, num_players, simulat
 
 def profile_async_worker(wid, num_workers, num_envs, learner_queue, num_players, simulations_per_choice):
     cProfile.runctx('async_worker(wid, num_workers, num_envs, learner_queue, num_players, simulations_per_choice)',
-                    globals(), locals(), sort='cumtime')
+                    globals(), locals(), sort='tottime')
 
 
-def manual_worker(worker_id, num_players, num_workers, num_envs, simulations_per_choice, c, num_iterations=None):
+def manual_worker(worker_id, num_players, num_workers, num_envs, simulations_per_choice, c, num_games=None):
+    # os.nice(-20)
+    # param = os.sched_param(os.sched_get_priority_max(os.SCHED_FIFO))
+    # os.sched_setscheduler(0, os.SCHED_FIFO, param)
     envs = [shared_memory_manager.SharedMemoryManager.make_env(env_id) for env_id in range(num_envs)]
-    sim = Simulator.init(worker_id, num_players, num_workers, envs, simulations_per_choice, c, num_iterations)
+    sim = Simulator.init(worker_id, num_players, num_workers, envs, simulations_per_choice, c, num_games)
     sim.run()
 
 
-def profile_manual_worker(wid, num_players, num_workers, num_envs, simulations_per_choice, c):
-    cProfile.runctx('manual_worker(wid, num_workers, num_envs, learner_queue, num_players, simulations_per_choice)',
-                    globals(), locals(), sort='cumtime')
+def profile_manual_worker(worker_id, num_players, num_workers, num_envs, simulations_per_choice, c, num_games=None):
+    cProfile.runctx('manual_worker(worker_id, num_players, num_workers, num_envs, simulations_per_choice, c, num_games)',
+                    globals(), locals(), sort='tottime')
 
 
 if __name__ == '__main__':
@@ -204,9 +208,11 @@ if __name__ == '__main__':
     from training import evaluator
     # logging.getLogger().setLevel(logging.DEBUG)
     model_base_path = 'C:\\Users\\dan\\PycharmProjects\\ScytheBot\\training\\data'
-    num_envs = 1
-    num_workers = 1
+    num_envs = 4
+    num_workers = 8
     smm = shared_memory_manager.SharedMemoryManager.init(num_workers, num_envs)
-    mp.Process(target=evaluator.evaluator, args=(num_envs, num_workers, model_base_path, True)).start()
-    manual_worker(worker_id=0, num_players=2, num_workers=1, num_envs=1, simulations_per_choice=10, c=1, num_iterations=3)
+    ev = mp.Process(target=evaluator.evaluator, args=(num_envs, num_workers, model_base_path, True))
+    ev.start()
+    profile_manual_worker(worker_id=0, num_players=2, num_workers=num_workers, num_envs=num_envs, simulations_per_choice=1, c=1, num_games=3)
+    ev.kill()
     smm.unlink()

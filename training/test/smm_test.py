@@ -8,42 +8,46 @@ from training import shared_memory_manager
 from training.worker_env_conn import WorkerEnvConn
 
 
-def board_value(env_id, worker_id, row, col, plane):
-    return row * 10000 + col * 1000 + plane * 100 + env_id * 10 + worker_id
+def board_value(env_id, worker_id, slot, row, col, plane):
+    return row * 100000 + col * 10000 + plane * 1000 + env_id * 100 + worker_id * 10 + slot
 
 
-def data_value(env_id, worker_id, index):
-    return index * 100 + env_id * 10 + worker_id
+def data_value(env_id, worker_id, slot, index):
+    return index * 1000 + env_id * 100 + worker_id * 10 + slot
 
 
-def pred_value(env_id, worker_id, head, index):
-    return head.value * 1000 + index * 100 + env_id * 10 + worker_id
+def pred_value(env_id, worker_id, slot, head, index):
+    return head.value * 10000 + index * 1000 + env_id * 100 + worker_id * 10 + slot
 
 
-def check_boards(boards, num_workers, env_id):
+def check_boards(boards, num_workers, slots_per_worker, env_id):
     w, r, c, p = boards.shape
-    assert w == num_workers
-    for worker_id in range(w):
-        for row in range(r):
-            for col in range(c):
-                for plane in range(p):
-                    assert boards[worker_id, row, col, plane] == board_value(env_id, worker_id, row, col, plane)
+    assert w == num_workers * slots_per_worker
+    for worker_id in range(num_workers):
+        for slot in range(slots_per_worker):
+            for row in range(r):
+                for col in range(c):
+                    for plane in range(p):
+                        assert boards[worker_id * slots_per_worker + slot, row, col, plane] ==\
+                               board_value(env_id, worker_id, slot, row, col, plane)
 
 
-def check_data(data, num_workers, env_id):
+def check_data(data, num_workers, slots_per_worker, env_id):
     w, l = data.shape
-    assert w == num_workers
+    assert w == num_workers * slots_per_worker
     for worker_id in range(w):
-        for index in range(l):
-            assert data[worker_id, index] == data_value(env_id, worker_id, index)
+        for slot in range(slots_per_worker)
+            for index in range(l):
+                assert data[worker_id * slots_per_worker + slot, index] == data_value(env_id, worker_id, slot, index)
 
 
-def check_preds(preds, env_id, worker_id):
+def check_preds(preds, env_id, worker_id, slots_per_worker):
     for head in model_const.Head:
-        l = len(preds[head.value])
+        l = len(preds[head.value][0])
         assert l == model.head_sizes[head]
-        for index in range(l):
-            assert preds[head.value][index] == pred_value(env_id, worker_id, head, index)
+        for slot in range(slots_per_worker):
+            for index in range(l):
+                assert preds[head.value][slot, index] == pred_value(env_id, worker_id, slot, head, index)
 
 
 def clear_preds(preds):
@@ -51,7 +55,7 @@ def clear_preds(preds):
         preds[head.value][:] = 0
 
 
-async def worker_coro(env_id, num_workers, worker_id):
+async def worker_coro(env_id, num_workers, slots_per_worker, worker_id):
     # A worker should write down some fake data into its reserved area for game encodings, sleep, and then
     # read back prediction data.
     print(f'Worker {worker_id+1} of {num_workers} starting for environment {env_id}')
@@ -75,8 +79,8 @@ async def worker_coro(env_id, num_workers, worker_id):
         clear_preds(my_view.preds)
 
 
-def worker(num_envs, num_workers, worker_id):
-    asyncio.run(asyncio.wait([worker_coro(env_id, num_workers, worker_id) for env_id in range(num_envs)]))
+def worker(num_envs, num_workers, slots_per_worker, worker_id):
+    asyncio.run(asyncio.wait([worker_coro(env_id, num_workers, slots_per_worker, worker_id) for env_id in range(num_envs)]))
 
 
 async def evaluator_coro(num_workers, env_id):
@@ -118,7 +122,8 @@ def test():
     # specific slices of memory, and the evaluators should have access to everything.
     num_workers = 3
     envs_per_worker = 3
-    smm = shared_memory_manager.SharedMemoryManager.init(num_workers, envs_per_worker)
+    slots_per_worker = 3
+    smm = shared_memory_manager.SharedMemoryManager.init(num_workers, slots_per_worker, envs_per_worker)
     procs = []
     for worker_id in range(num_workers):
             p = mp.Process(target=worker, args=(envs_per_worker, num_workers, worker_id))

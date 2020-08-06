@@ -10,9 +10,9 @@ from training.worker_env_conn import WorkerEnvConn
 
 def set_up_evaluator(num_envs, num_workers, model_base_path, in_test=False):
     # os.nice(-20)
-    if not in_test:
-        param = os.sched_param(os.sched_get_priority_max(os.SCHED_FIFO))
-        os.sched_setscheduler(0, os.SCHED_FIFO, param)
+    # if not in_test:
+    #     param = os.sched_param(os.sched_get_priority_max(os.SCHED_FIFO))
+    #     os.sched_setscheduler(0, os.SCHED_FIFO, param)
     # An environment is a group of workers and a single index. Each worker will be simulating multiple
     # games sequentially; it will put game states from game N into environment N.
     from training import model
@@ -41,7 +41,7 @@ def evaluator(num_envs, num_workers, model_base_path, in_test=False):
 
 
 def profile_evaluator(num_envs, num_workers, model_base_path):
-    cProfile.runctx('evaluator(num_envs, num_workers, model_base_path)', globals(), locals(), sort='cumtime')
+    cProfile.runctx('evaluator(num_envs, num_workers, model_base_path)', globals(), locals(), sort='tottime')
 
 
 def async_evaluator(num_envs, num_workers, model_base_path):

@@ -283,6 +283,7 @@ class MCTSZeroAgentManual:
     timestamp = attr.ib(default=None)
 
     def begin_episode(self, faction_names):
+        print(f'Starting an episode')
         self.experience_collectors = {faction_name: None for faction_name in faction_names}
         self.current_tree_node = None
         self.current_tree_root = None
