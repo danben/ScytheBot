@@ -8,8 +8,9 @@ from training.shared_memory_manager import SharedMemoryManager, View
 from training.worker_env_conn import WorkerEnvConn
 
 
-def set_up_evaluator(num_envs, num_workers, model_base_path, in_test=False):
-    # os.nice(-20)
+def set_up_evaluator(num_envs, num_slots, model_base_path, in_test=False):
+    if not in_test:
+        os.nice(-20)
     # if not in_test:
     #     param = os.sched_param(os.sched_get_priority_max(os.SCHED_FIFO))
     #     os.sched_setscheduler(0, os.SCHED_FIFO, param)
@@ -23,21 +24,25 @@ def set_up_evaluator(num_envs, num_workers, model_base_path, in_test=False):
     tf.compat.v1.disable_eager_execution()
     # Set up shared memory buffers. Each contains all of the memory for one data type in a single environment.
     # Each element of preds will be a list of arrays corresponding to each model head.
-    views = [View.for_evaluator(SharedMemoryManager.make_env(env_id), num_workers) for env_id in range(num_envs)]
+    views = [View.for_evaluator(env=SharedMemoryManager.make_env(env_id), num_slots=num_slots) for env_id in range(num_envs)]
     nn = load_model(model_base_path)
     return views, nn
 
 
-def evaluator(num_envs, num_workers, model_base_path, in_test=False):
-    views, nn = set_up_evaluator(num_envs, num_workers, model_base_path, in_test)
+def evaluator(num_envs, num_slots, model_base_path, in_test=False):
+    views, nn = set_up_evaluator(num_envs, num_slots, model_base_path, in_test)
     while True:
-        for view in views:
-            view.wait_for_boards(num_workers)
-            view.wait_for_data(num_workers)
-            predictions = nn.predict([view.board, view.data], batch_size=num_workers)
-            view.write_boards_clean(num_workers)
-            view.write_data_clean(num_workers)
-            view.write_preds(predictions, num_workers)
+        for env_id, view in enumerate(views):
+            print(f'Waiting for boards from env {env_id}')
+            view.wait_for_boards()
+            print(f'Waiting for data from env {env_id}')
+            view.wait_for_data()
+            print(f'Predicting for env {env_id}')
+            predictions = nn.predict([view.boards, view.data], batch_size=num_slots)
+            view.write_boards_clean()
+            view.write_data_clean()
+            print(f'Writing predictions for env {env_id}')
+            view.write_preds(predictions)
 
 
 def profile_evaluator(num_envs, num_workers, model_base_path):

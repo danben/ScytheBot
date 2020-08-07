@@ -317,11 +317,11 @@ class MCTSZeroAgentManual:
         GAME_OVER = 2
         NEXT_SIMULATION = 3
 
-    def send_predictions_to_evaluator(self, game_state):
+    def send_encodings_to_evaluator(self, game_state, env_slot):
         encoded_game_state = gs_enc.encode(game_state)
-        self.view.write_board(encoded_game_state.board)
+        self.view.write_board(encoded_game_state.board, env_slot)
         encoded_data = encoded_game_state.encoded_data()
-        self.view.write_data(encoded_data)
+        self.view.write_data(encoded_data, env_slot)
 
     def handle_terminal_state(self):
         # We are at a terminal state, so just do propagation and move to the next simulation. There are
@@ -330,7 +330,7 @@ class MCTSZeroAgentManual:
         self.current_tree_node = self.current_tree_root
         return MCTSZeroAgentManual.Result.NEXT_SIMULATION, None
 
-    def advance_until_predictions_needed_or_move_selected_or_game_over(self, root_game_state, root_choices):
+    def advance_until_predictions_needed_or_move_selected_or_game_over(self, root_game_state, root_choices, env_slot):
         if logger.isEnabledFor(logging.DEBUG):
             logger.debug(f'Call to advance. Current simulation: {self.current_simulation} out of {self.simulations_per_choice}')
         faction_name = sc.get_current_player(root_game_state).faction_name()
@@ -362,7 +362,7 @@ class MCTSZeroAgentManual:
 
             # Save these for the decoding step
             self.pending_game_state_and_choices_and_move = root_game_state, root_choices, None
-            self.send_predictions_to_evaluator(root_game_state)
+            self.send_encodings_to_evaluator(root_game_state, env_slot)
             return MCTSZeroAgentManual.Result.PREDICTIONS_NEEDED, None
 
         if self.current_simulation == self.simulations_per_choice:
@@ -427,20 +427,20 @@ class MCTSZeroAgentManual:
                 return self.handle_terminal_state()
             else:
                 self.pending_game_state_and_choices_and_move = new_state, legal_moves, move
-                self.send_predictions_to_evaluator(new_state)
+                self.send_encodings_to_evaluator(new_state, env_slot)
                 return MCTSZeroAgentManual.Result.PREDICTIONS_NEEDED, None
         else:
             return self.handle_terminal_state()
 
-    def decode_predictions_and_propagate_values(self):
+    def decode_predictions_and_propagate_values(self, env_slot):
         # We've got some predictions, which means we can create a new node (maybe the root)
         # and propagate values up the tree (if this is not the root). Once we do that, we're ready
         # to start the next simulation, so reset the current tree node to the root.
         assert self.pending_game_state_and_choices_and_move is not None
         game_state, choices, move = self.pending_game_state_and_choices_and_move
-        self.view.wait_for_preds()
-        values, move_priors = model.to_values_and_move_priors(game_state, choices, self.view.preds)
-        self.view.write_preds_clean()
+        self.view.wait_for_preds(env_slot)
+        values, move_priors = model.to_values_and_move_priors(game_state, choices, self.view.preds[env_slot])
+        self.view.write_preds_clean(env_slot)
         self.current_tree_node = Node.from_state(game_state, values, parent=self.current_tree_node, last_move=move,
                                                  priors=move_priors)
         if self.current_tree_root is None:

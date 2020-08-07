@@ -45,7 +45,7 @@ class Env:
     dirty_shared = attr.ib()
 
     @classmethod
-    def init(cls, num_slots, env_id):
+    def init(cls, *, num_slots, env_id):
         boards_shape = get_boards_shape(num_slots)
         boards_dummy = np.ndarray(boards_shape, dtype=np.float64)
         data_shape = get_data_shape(num_slots)
@@ -76,13 +76,14 @@ class View:
     # Make sure to keep a reference to the env as long as we need this view, or else the underlying memory will be
     # deallocated.
     env = attr.ib()
+    num_slots = attr.ib()
     boards = attr.ib()
     data = attr.ib()
     preds = attr.ib()
     dirty = attr.ib()
 
     @classmethod
-    def for_evaluator(cls, env, num_slots):
+    def for_evaluator(cls, *, env, num_slots):
         boards_shape = get_boards_shape(num_slots)
         data_shape = get_data_shape(num_slots)
         preds_shapes = [get_preds_shape(num_slots, head) for head in model_const.Head]
@@ -92,38 +93,44 @@ class View:
         preds = [np.ndarray(preds_shapes[i], dtype=np.float64, buffer=env.preds_shared[i].buf)
                  for i in range(len(preds_shapes))]
         dirty = np.ndarray(dirty_shape, dtype=np.float64, buffer=env.dirty_shared.buf)
-        return cls(env, board, data, preds, dirty)
+        return cls(env, num_slots, board, data, preds, dirty)
 
     @classmethod
-    def for_worker(cls, env, slots_per_worker, worker_id):
-        evaluator_view = View.for_evaluator(env, slots_per_worker)
+    def for_worker(cls, *, env, slots_per_worker, num_workers, worker_id):
+        evaluator_view = View.for_evaluator(env=env, num_slots=slots_per_worker * num_workers)
         if logging.getLogger().isEnabledFor(logging.DEBUG):
             logging.debug(f'Shape of evaluator_view.board: {evaluator_view.boards.shape}')
             logging.debug(f'Shape of board buffer for worker: {evaluator_view.boards[worker_id].shape}')
         start = worker_id * slots_per_worker
         end = (worker_id + 1) * slots_per_worker
-        board = np.ndarray(gs_enc.EncodedGameState.board_shape, dtype=np.float64,
+        board = np.ndarray(get_boards_shape(slots_per_worker), dtype=np.float64,
                            buffer=evaluator_view.boards[start:end])
-        data = np.ndarray(gs_enc.EncodedGameState.data_shape, dtype=np.float64, buffer=evaluator_view.data[start:end])
-        preds = [np.ndarray((model.head_sizes[head],), dtype=np.float64,
-                            buffer=evaluator_view.preds[head.value][start:end]) for head in model_const.Head]
-        dirty = np.ndarray((3,), dtype=np.float64, buffer=evaluator_view.dirty[start:end])
-        return cls(env, board, data, preds, dirty)
+        data = np.ndarray(get_data_shape(slots_per_worker), dtype=np.float64, buffer=evaluator_view.data[start:end])
+        preds = [[np.ndarray((model.head_sizes[head],), dtype=np.float64, buffer=evaluator_view.preds[head.value][worker_id * slots_per_worker + slot])
+                  for head in model_const.Head]
+                 for slot in range(slots_per_worker)]
+        # preds = [np.ndarray((slots_per_worker, model.head_sizes[head]), dtype=np.float64,
+        #                     buffer=evaluator_view.preds[head.value][start:end]) for head in model_const.Head]
+        dirty = np.ndarray((slots_per_worker, 3), dtype=np.float64, buffer=evaluator_view.dirty[start:end])
+        return cls(env, slots_per_worker, board, data, preds, dirty)
 
     def write_board(self, board, slot):
-        assert board.shape == self.boards.shape
+        assert 0 <= slot < self.num_slots
+        assert board.shape == self.boards[slot].shape\
+
         assert self.dirty[slot, DataType.BOARDS.value] == 0
         self.boards[slot, :] = board
         self.dirty[slot, DataType.BOARDS.value] = 1
 
     def write_data(self, data, slot):
-        assert data.shape == self.data.shape
+        assert 0 <= slot < self.num_slots
+        assert data.shape == self.data[slot].shape
         assert self.dirty[slot, DataType.DATA.value] == 0
         self.data[slot, :] = data
         self.dirty[slot, DataType.DATA.value] = 1
 
-    def write_preds(self, preds, num_slots):
-        for i in range(num_slots):
+    def write_preds(self, preds):
+        for i in range(self.num_slots):
             assert self.dirty[i, DataType.PREDS.value] == 0
 
         for head in model_const.Head:
@@ -133,16 +140,16 @@ class View:
 
         self.dirty[:, DataType.PREDS.value] = 1
 
-    def wait_for_boards(self, num_slots):
-        for i in range(num_slots):
+    def wait_for_boards(self):
+        for i in range(self.num_slots):
             while self.dirty[i, DataType.BOARDS.value] == 0:
                 pass
 
     def write_boards_clean(self):
         self.dirty[:, DataType.BOARDS.value] = 0
 
-    def wait_for_data(self, num_slots):
-        for i in range(num_slots):
+    def wait_for_data(self):
+        for i in range(self.num_slots):
             while self.dirty[i, DataType.DATA.value] == 0:
                 pass
 
@@ -150,10 +157,12 @@ class View:
         self.dirty[:, DataType.DATA.value] = 0
 
     def wait_for_preds(self, slot):
+        assert 0 <= slot < self.num_slots
         while self.dirty[slot, DataType.PREDS.value] == 0:
             pass
 
     def write_preds_clean(self, slot):
+        assert 0 <= slot < self.num_slots
         self.dirty[slot, DataType.PREDS.value] = 0
 
 
@@ -165,13 +174,13 @@ class SharedMemoryManager:
     envs = attr.ib()
 
     @classmethod
-    def init(cls, num_workers, slots_per_worker, envs_per_worker):
+    def init(cls, *, num_workers, slots_per_worker, envs_per_worker):
         num_slots = num_workers * slots_per_worker
         # Let's make empty numpy arrays for all the memory we need. Each worker needs to be able to send an encoded
         # board and game state, and read back a set of predictions. We need one of each of those for each
         # worker/environment pair.
         return cls(num_workers, slots_per_worker, envs_per_worker,
-                   [Env.init(num_slots, i) for i in range(envs_per_worker)])
+                   [Env.init(num_slots=num_slots, env_id=i) for i in range(envs_per_worker)])
 
     @staticmethod
     def make_env(env_id):
@@ -187,13 +196,14 @@ class SharedMemoryManager:
         dirty_shared = shared_memory.SharedMemory(name=get_segment_name(env_id, DataType.DIRTY))
         return Env(env_id, boards_shared, data_shared, preds_shared, dirty_shared)
 
-    def get_worker_view(self, env_id, worker_id):
+    def get_worker_view(self, *, env_id, worker_id):
         env = SharedMemoryManager.make_env(env_id)
-        return View.for_worker(env, self.slots_per_worker, worker_id)
+        return View.for_worker(env=env, slots_per_worker=self.slots_per_worker, num_workers=self.num_workers,
+                               worker_id=worker_id)
 
-    def get_evaluator_view(self, env_id):
+    def get_evaluator_view(self, *, env_id):
         env = SharedMemoryManager.make_env(env_id)
-        return View.for_evaluator(env, self.num_workers * self.slots_per_worker)
+        return View.for_evaluator(env=env, num_slots=self.num_workers * self.slots_per_worker)
 
     def unlink(self):
         for env in self.envs:

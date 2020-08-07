@@ -12,6 +12,7 @@ from training.simulator import profile_manual_worker, manual_worker
 NUM_PLAYERS = 2
 NUM_WORKERS = 1
 NUM_ENVS = 2
+SLOTS_PER_WORKER = 6
 SIMULATIONS_PER_CHOICE = 10
 
 
@@ -33,7 +34,7 @@ if __name__ == '__main__':
     workers = []
     ev_process = None
     # learner_queue = mp.Queue()
-    smm = SharedMemoryManager.init(NUM_WORKERS, NUM_ENVS)
+    smm = SharedMemoryManager.init(num_workers=NUM_WORKERS, slots_per_worker=SLOTS_PER_WORKER, envs_per_worker=NUM_ENVS)
     try:
         for id in range(NUM_WORKERS):
             p = mp.Process(target=manual_worker, args=(id, NUM_PLAYERS, NUM_WORKERS,
@@ -43,7 +44,8 @@ if __name__ == '__main__':
             # os.system(f'taskset -p -c {id} {p.pid}')
         model_base_path = 'C:\\Users\\dan\\PycharmProjects\\ScytheBot\\training\\data'
 
-        ev_process = mp.Process(target=profile_evaluator, args=(NUM_ENVS, NUM_WORKERS, model_base_path))
+        ev_process = mp.Process(target=profile_evaluator, args=(NUM_ENVS, NUM_WORKERS * SLOTS_PER_WORKER,
+                                                                model_base_path))
         ev_process.start()
         # os.system(f'taskset -p -c {NUM_WORKERS} {ev_process.pid}')
         for worker in workers:
