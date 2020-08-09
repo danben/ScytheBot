@@ -130,6 +130,7 @@ class View:
         self.dirty[slot, DataType.DATA.value] = 1
 
     def write_preds(self, preds):
+        assert self.dirty.shape[0] == self.num_slots
         for i in range(self.num_slots):
             assert self.dirty[i, DataType.PREDS.value] == 0
 

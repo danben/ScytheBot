@@ -105,6 +105,7 @@ def map_factions_to_values(game_state, values):
 
 
 def to_values_and_move_priors(game_state, choices, preds):
+    assert choices == game_state.legal_moves()
     values = map_factions_to_values(game_state, preds[Head.VALUE_HEAD.value])
     move_priors = decode.get_move_priors(preds, game_state.action_stack.first.__class__, choices)
     return values, move_priors

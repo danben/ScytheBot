@@ -73,8 +73,8 @@ class Simulator:
         views = [shared_memory_manager.View.for_worker(env=env, slots_per_worker=slots_per_worker,
                                                        num_workers=num_workers, worker_id=worker_id) for env in envs]
         game_states = [([None] * slots_per_worker) for _ in range(len(envs))]
-        agents = [[MCTSZeroAgentManual(c=c, simulations_per_choice=simulations_per_choice, view=views[env])
-                    for _ in range(slots_per_worker)] for env in range(len(envs))]
+        agents = [[MCTSZeroAgentManual(worker_id=worker_id, env_slot=slot, c=c, simulations_per_choice=simulations_per_choice, view=views[env])
+                    for slot in range(slots_per_worker)] for env in range(len(envs))]
         return cls(worker_id, num_players, slots_per_worker, views, game_states,
                    agents, num_games)
 
@@ -117,13 +117,12 @@ class Simulator:
                     game_state = self.game_states[env_num][slot_num]
                     choices = game_state.legal_moves()
                     agent = self.agents[env_num][slot_num]
-                    result, move = agent.advance_until_predictions_needed_or_move_selected_or_game_over(game_state, choices, slot_num)
+                    result, move = agent.advance_until_predictions_needed_or_move_selected_or_game_over(game_state, choices)
                     while result is not MCTSZeroAgentManual.Result.PREDICTIONS_NEEDED and this_game != last_game:
                         game_state = self.game_states[env_num][slot_num]
                         choices = game_state.legal_moves()
                         if game_state.is_over():
-                            if env_num == len(self.views) - 1 and slot_num == self.slots_per_worker - 1:
-                                this_game += 1
+                            this_game += 1
                             result, move = handle_terminal_state(agent=agent, game_state=game_state, env_num=env_num,
                                                                  slot_num=slot_num)
                         elif result is MCTSZeroAgentManual.Result.MOVE_SELECTED:
@@ -131,8 +130,7 @@ class Simulator:
                             # updating the game state and current player.
                             game_state = apply_move(game_state, move)
                             if game_state.is_over():
-                                if env_num == len(self.views) - 1 and slot_num == self.slots_per_worker - 1:
-                                    this_game += 1
+                                this_game += 1
                                 result, move = handle_terminal_state(agent=agent, game_state=game_state,
                                                                      env_num=env_num, slot_num=slot_num)
                             else:
@@ -144,8 +142,7 @@ class Simulator:
                                         game_state = apply_move(game_state, choices[0])
                                     choices = game_state.legal_moves()
                                 if game_state.is_over():
-                                    if env_num == len(self.views) - 1 and slot_num == self.slots_per_worker - 1:
-                                        this_game += 1
+                                    this_game += 1
                                     result, move = handle_terminal_state(agent=agent, game_state=game_state,
                                                                          env_num=env_num, slot_num=slot_num)
                                 else:
@@ -164,7 +161,8 @@ class Simulator:
             if this_game != last_game:
                 for env_num, view in enumerate(self.views):
                     for slot_num in range(slots_per_worker):
-                        self.agents[env_num][slot_num].decode_predictions_and_propagate_values(env_slot=slot_num)
+                        view.wait_for_preds(slot_num)
+                        self.agents[env_num][slot_num].decode_predictions_and_propagate_values()
 
 
 def async_worker(wid, num_workers, num_envs, learner_queue, num_players, simulations_per_choice):
@@ -200,7 +198,7 @@ def profile_async_worker(wid, num_workers, num_envs, learner_queue, num_players,
 
 
 def manual_worker(worker_id, num_players, num_workers, slots_per_worker, num_envs, simulations_per_choice, c, num_games=None):
-    # os.nice(-20)
+    os.nice(-20)
     # param = os.sched_param(os.sched_get_priority_max(os.SCHED_FIFO))
     # os.sched_setscheduler(0, os.SCHED_FIFO, param)
     envs = [shared_memory_manager.SharedMemoryManager.make_env(env_id) for env_id in range(num_envs)]
@@ -210,8 +208,8 @@ def manual_worker(worker_id, num_players, num_workers, slots_per_worker, num_env
     sim.run()
 
 
-def profile_manual_worker(worker_id, num_players, num_workers, num_envs, simulations_per_choice, c, num_games=None):
-    cProfile.runctx('manual_worker(worker_id, num_players, num_workers, num_envs, simulations_per_choice, c, num_games)',
+def profile_manual_worker(worker_id, num_players, num_workers, slots_per_worker, num_envs, simulations_per_choice, c, num_games=None):
+    cProfile.runctx('manual_worker(worker_id, num_players, num_workers, slots_per_worker, num_envs, simulations_per_choice, c, num_games)',
                     globals(), locals(), sort='tottime')
 
 
@@ -220,14 +218,15 @@ if __name__ == '__main__':
     from training import evaluator
     # logging.getLogger().setLevel(logging.DEBUG)
     model_base_path = 'C:\\Users\\dan\\PycharmProjects\\ScytheBot\\training\\data'
-    num_envs = 1
-    num_workers = 1
+    num_envs = 2
+    num_workers = 6
     slots_per_worker = 6
+    num_slots = num_workers * slots_per_worker
     smm = shared_memory_manager.SharedMemoryManager.init(num_workers=num_workers, slots_per_worker=slots_per_worker,
                                                          envs_per_worker=num_envs)
-    ev = mp.Process(target=evaluator.evaluator, args=(num_envs, num_workers, model_base_path, True))
+    ev = mp.Process(target=evaluator.evaluator, args=(num_envs, num_slots, model_base_path, True))
     ev.start()
-    manual_worker(worker_id=0, num_players=2, num_workers=num_workers, slots_per_worker=slots_per_worker,
-                  num_envs=num_envs, simulations_per_choice=1, c=1, num_games=3)
+    profile_manual_worker(worker_id=0, num_players=2, num_workers=num_workers, slots_per_worker=slots_per_worker,
+                  num_envs=num_envs, simulations_per_choice=10, c=1, num_games=72)
     ev.kill()
     smm.unlink()

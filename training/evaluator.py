@@ -4,7 +4,7 @@ import os
 import uvloop
 
 from training.model import load as load_model
-from training.shared_memory_manager import SharedMemoryManager, View
+from training.shared_memory_manager import SharedMemoryManager, View, DataType, get_boards_shape, get_data_shape, get_preds_shape
 from training.worker_env_conn import WorkerEnvConn
 
 
@@ -25,6 +25,9 @@ def set_up_evaluator(num_envs, num_slots, model_base_path, in_test=False):
     # Set up shared memory buffers. Each contains all of the memory for one data type in a single environment.
     # Each element of preds will be a list of arrays corresponding to each model head.
     views = [View.for_evaluator(env=SharedMemoryManager.make_env(env_id), num_slots=num_slots) for env_id in range(num_envs)]
+    for view in views:
+        assert view.boards.shape == get_boards_shape(num_slots)
+        assert view.data.shape == get_data_shape(num_slots)
     nn = load_model(model_base_path)
     return views, nn
 
@@ -33,20 +36,18 @@ def evaluator(num_envs, num_slots, model_base_path, in_test=False):
     views, nn = set_up_evaluator(num_envs, num_slots, model_base_path, in_test)
     while True:
         for env_id, view in enumerate(views):
-            print(f'Waiting for boards from env {env_id}')
             view.wait_for_boards()
-            print(f'Waiting for data from env {env_id}')
             view.wait_for_data()
-            print(f'Predicting for env {env_id}')
             predictions = nn.predict([view.boards, view.data], batch_size=num_slots)
             view.write_boards_clean()
             view.write_data_clean()
-            print(f'Writing predictions for env {env_id}')
+            for slot in range(num_slots):
+                assert view.dirty[slot, DataType.PREDS.value] == 0
             view.write_preds(predictions)
 
 
-def profile_evaluator(num_envs, num_workers, model_base_path):
-    cProfile.runctx('evaluator(num_envs, num_workers, model_base_path)', globals(), locals(), sort='tottime')
+def profile_evaluator(num_envs, num_slots, model_base_path):
+    cProfile.runctx('evaluator(num_envs, num_slots, model_base_path)', globals(), locals(), sort='tottime')
 
 
 def async_evaluator(num_envs, num_workers, model_base_path):

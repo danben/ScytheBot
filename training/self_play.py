@@ -41,13 +41,13 @@ if __name__ == '__main__':
                 NUM_ENVS, SIMULATIONS_PER_CHOICE, 0.8, 2))
             workers.append(p)
             p.start()
-            # os.system(f'taskset -p -c {id} {p.pid}')
+            os.system(f'taskset -p -c {id} {p.pid}')
         model_base_path = 'C:\\Users\\dan\\PycharmProjects\\ScytheBot\\training\\data'
 
         ev_process = mp.Process(target=profile_evaluator, args=(NUM_ENVS, NUM_WORKERS * SLOTS_PER_WORKER,
                                                                 model_base_path))
         ev_process.start()
-        # os.system(f'taskset -p -c {NUM_WORKERS} {ev_process.pid}')
+        os.system(f'taskset -p -c {NUM_WORKERS} {ev_process.pid}')
         for worker in workers:
             worker.join()
         ev_process.kill()

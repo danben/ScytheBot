@@ -1,3 +1,4 @@
+import game.constants as constants
 import game.state_change as sc
 from game.actions import Boolean, Choice, MaybeCombat, Optional, StateChange
 from game.types import Benefit, ResourceType, TopActionType
@@ -43,6 +44,7 @@ class LoadWorkers(Choice):
     def choices(self, game_state):
         board_coords = sc.get_board_coords_for_piece_key(game_state, self.mech_key)
         space = game_state.board.get_space(board_coords)
+        assert len(space.worker_keys) <= constants.NUM_WORKERS
         return list(range(len(space.worker_keys)+1))
 
     def do(self, game_state, amt):
